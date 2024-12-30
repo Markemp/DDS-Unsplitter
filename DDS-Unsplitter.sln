@@ -9,8 +9,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDSUnsplitter.Library", "..
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDSUnsplitter.Tests", "..\DDSUnsplitter.Tests\DDSUnsplitter.Tests.csproj", "{9211EF6F-B9B5-4AAD-BFAB-E671D936D762}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDSUnsplitter.UnitTests", "..\DDSUnsplitter.UnitTests\DDSUnsplitter.UnitTests.csproj", "{DC50E8DE-A2BE-44B0-BF6D-D0B0FE30A2D0}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -29,10 +27,6 @@ Global
 		{9211EF6F-B9B5-4AAD-BFAB-E671D936D762}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9211EF6F-B9B5-4AAD-BFAB-E671D936D762}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9211EF6F-B9B5-4AAD-BFAB-E671D936D762}.Release|Any CPU.Build.0 = Release|Any CPU
-		{DC50E8DE-A2BE-44B0-BF6D-D0B0FE30A2D0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{DC50E8DE-A2BE-44B0-BF6D-D0B0FE30A2D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{DC50E8DE-A2BE-44B0-BF6D-D0B0FE30A2D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{DC50E8DE-A2BE-44B0-BF6D-D0B0FE30A2D0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
