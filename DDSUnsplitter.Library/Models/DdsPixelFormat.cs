@@ -1,6 +1,5 @@
 ﻿namespace DDSUnsplitter.Library.Models;
 
-
 public sealed record DdsPixelFormat
 {
     public uint Size { get; init; }

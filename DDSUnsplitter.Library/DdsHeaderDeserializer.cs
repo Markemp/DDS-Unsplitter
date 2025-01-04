@@ -1,26 +1,20 @@
-﻿using DDSUnsplitter.Library.Models;
+﻿namespace DDSUnsplitter.Library;
 
-namespace DDSUnsplitter.Library;
+using DDSUnsplitter.Library.Models;
+using static DDSUnsplitter.Library.Models.DdsConstants;
 
 public static class DdsHeaderDeserializer
 {
-    public static DdsHeader Deserialize(byte[] headerContent)
+    public static (DdsHeader Header, DXT10Header? DXT10) Deserialize(byte[] headerContent)
     {
+        ValidateHeaderContent(headerContent);
+
         using var ms = new MemoryStream(headerContent);
         using var reader = new BinaryReader(ms);
 
-        // Skip the DDS magic number if present (first 4 bytes)
-        if (new string(reader.ReadChars(4)) == "DDS ")
-        {
-            // Continue reading after magic number
-        }
-        else
-        {
-            // Reset position if no magic number
-            ms.Position = 0;
-        }
+        SkipMagicNumberIfPresent(reader);
 
-        return new DdsHeader
+        var header = new DdsHeader
         {
             Size = reader.ReadInt32(),
             Flags = reader.ReadInt32(),
@@ -29,7 +23,7 @@ public static class DdsHeaderDeserializer
             PitchOrLinearSize = reader.ReadInt32(),
             Depth = reader.ReadInt32(),
             MipMapCount = reader.ReadInt32(),
-            Reserved1 = Enumerable.Range(0, 11).Select(_ => reader.ReadInt32()).ToArray(),
+            Reserved1 = ReadReserved1(reader),
             PixelFormat = ReadPixelFormat(reader),
             Caps = reader.ReadInt32(),
             Caps2 = reader.ReadInt32(),
@@ -37,6 +31,31 @@ public static class DdsHeaderDeserializer
             Caps4 = reader.ReadInt32(),
             Reserved2 = reader.ReadInt32()
         };
+
+        // Check if there's a DXT10 header and if we have enough data to read it
+        DXT10Header? dxt10Header = null;
+        if (IsDXT10Format(header) && ms.Position + DXT10_HEADER_SIZE <= ms.Length)
+            dxt10Header = ReadDXT10Header(reader);
+
+        return (header, dxt10Header);
+    }
+
+    private static bool IsDXT10Format(DdsHeader header) => new string(header.PixelFormat.FourCC) == "DX10";
+
+    private static void SkipMagicNumberIfPresent(BinaryReader reader)
+    {
+        long originalPosition = reader.BaseStream.Position;
+        string magic = new string(reader.ReadChars(DDS_MAGIC.Length));
+
+        if (magic != DDS_MAGIC)
+            reader.BaseStream.Position = originalPosition;
+    }
+
+    private static int[] ReadReserved1(BinaryReader reader)
+    {
+        return Enumerable.Range(0, RESERVED1_SIZE)
+            .Select(_ => reader.ReadInt32())
+            .ToArray();
     }
 
     private static DdsPixelFormat ReadPixelFormat(BinaryReader reader)
@@ -53,8 +72,31 @@ public static class DdsHeaderDeserializer
             ABitMask = reader.ReadUInt32()
         };
     }
-}
 
-// Usage example:
-// byte[] headerContent = ...; // Your header bytes
-// DdsHeader header = DdsHeaderDeserializer.Deserialize(headerContent);
+    private static DXT10Header ReadDXT10Header(BinaryReader reader)
+    {
+        return new DXT10Header
+        {
+            DxgiFormat = (DXGI_FORMAT)reader.ReadUInt32(),
+            ResourceDimension = (D3D10_RESOURCE_DIMENSION)reader.ReadUInt32(),
+            MiscFlag = reader.ReadUInt32(),
+            ArraySize = reader.ReadUInt32(),
+            MiscFlags2 = (DDS_ALPHA_MODE)reader.ReadUInt32()
+        };
+    }
+
+    private static void ValidateHeaderContent(byte[] headerContent)
+    {
+        if (headerContent == null)
+        {
+            throw new ArgumentNullException(nameof(headerContent));
+        }
+
+        if (headerContent.Length < DDS_HEADER_SIZE)
+        {
+            throw new ArgumentException(
+                $"Header content must be at least {DDS_HEADER_SIZE} bytes long",
+                nameof(headerContent));
+        }
+    }
+}

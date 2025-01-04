@@ -19,7 +19,7 @@ class Program
             if (args.Length > 1 && args[1] == "-s" || args[0] == "--safe")
                 useSafeName = true;
             string combinedFile = DDSFileCombiner.Combine(args[0], useSafeName);
-            Console.WriteLine($"Combined file created: {combinedFile}");
+            Console.WriteLine($"Combined file: {combinedFile}");
         }
         catch (Exception ex)
         {
