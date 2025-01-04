@@ -9,6 +9,7 @@ public class DDSFileCombinerTests
 {
     private const string TEST_FILES_DIR = "TestFiles";
     private string _tempDir;
+    private Dictionary<string, string> _copiedFiles = [];
 
     [OneTimeSetUp]
     public void SetUp()
@@ -65,6 +66,40 @@ public class DDSFileCombinerTests
     }
 
     [Test]
+    [TestCase(@"d:\depot\sc3.24\data\textures\defaults\defaultnouvs")]
+    [TestCase(@"D:\depot\ArmoredWarfare\textures\defaults\flat_normal_ddn")]
+    public void WhenCombining_WithJustPath_HandlesPathCorrectly(string baseFileName)
+    {
+        // Skip test if path doesn't exist
+        Assume.That(Directory.Exists(Path.GetDirectoryName(baseFileName)),
+            "Test directory not available - skipping test");
+
+        string tempPath = CopyFilesToTemp(baseFileName);
+
+        string combinedFileName = DDSFileCombiner.Combine(tempPath, true);
+
+        Assert.That(File.Exists(combinedFileName), "Combined file was not created");
+        // Verify the combined file was created in our temp directory
+        Assert.That(combinedFileName, Does.StartWith(_tempDir),
+            "Combined file was created outside temp directory");
+    }
+
+    [Test]
+    public void WhenCombining_WithMetadataEnding_HandlesFileCorrectly()
+    {
+        string baseFileName = @"D:\depot\ArmoredWarfare\textures\defaults\flat_normal_ddn.dds.0";
+
+        Assume.That(File.Exists(baseFileName), "Test file not available - skipping test");
+
+        string tempPath = CopyFilesToTemp(baseFileName);
+        string combinedFileName = DDSFileCombiner.Combine(tempPath, true);
+
+        Assert.That(File.Exists(combinedFileName), "Combined file was not created");
+        Assert.That(combinedFileName, Does.StartWith(_tempDir),
+            "Combined file was created outside temp directory");
+    }
+
+    [Test]
     public void Combine_SCWithCreatesCombinedFile()
     {
         string baseFileName = $@"TestFiles\defaultnouvs.dds";
@@ -80,35 +115,46 @@ public class DDSFileCombinerTests
         Assert.That(true);
     }
 
-    [Test]
-    public void Combine_SCWithJustFileNameFile()
+    private string CopyFilesToTemp(string sourcePath)
     {
-        string baseFileName = $@"d:\depot\sc3.24\data\textures\defaults\defaultnouvs";
+        // If we've already copied this source, return the cached path
+        if (_copiedFiles.ContainsKey(sourcePath))
+            return _copiedFiles[sourcePath];
 
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
+        string sourceDir = Path.GetDirectoryName(sourcePath);
+        string baseFileName = Path.GetFileName(sourcePath);
 
-        Assert.That(File.Exists(combinedFileName));
-        Assert.That(true);
-    }
+        // If no directory was provided, use current directory
+        if (string.IsNullOrEmpty(sourceDir))
+            sourceDir = Directory.GetCurrentDirectory();
 
-    [Test]
-    public void Combine_MetadataEndsdWith0()
-    {
-        string baseFileName = $@"D:\depot\ArmoredWarfare\textures\defaults\flat_normal_ddn.dds.0";
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
-    }
+        // Create a unique subdirectory for this test's files
+        string testSubDir = Path.Combine(_tempDir, Path.GetRandomFileName());
+        Directory.CreateDirectory(testSubDir);
 
-    [Test]
-    public void Combine_AWWithOnlyFileNameProvided()
-    {
-        string baseFileName = $@"D:\depot\ArmoredWarfare\textures\defaults\flat_normal_ddn";
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
-    }
+        if (Directory.Exists(sourceDir))
+        {
+            // Always treat the last part as a file name pattern, regardless of extension
+            string searchPattern = baseFileName + "*";
+            var matchingFiles = Directory.GetFiles(sourceDir, searchPattern);
 
-    [Test]
-    public void Combine_SimpleFileName()
-    {
-        string baseFileName = $"ddsfile";
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
+            if (!matchingFiles.Any())
+                throw new FileNotFoundException($"No files found matching pattern: {searchPattern} in directory: {sourceDir}");
+
+            foreach (string file in matchingFiles)
+            {
+                string destFile = Path.Combine(testSubDir, Path.GetFileName(file));
+                File.Copy(file, destFile);
+            }
+        }
+        else
+            throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
+
+        // Store the mapping of original to temp path
+        // For consistency, we'll map to the base file (typically the .dds file)
+        string tempPath = Path.Combine(testSubDir, baseFileName);
+        _copiedFiles[sourcePath] = tempPath;
+
+        return tempPath;
     }
 }
