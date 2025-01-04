@@ -1,74 +1,129 @@
-﻿using System.Collections.Generic;
+﻿namespace DDSUnsplitter.Library;
 
-namespace DDSUnsplitter.Library;
-
+/// <summary>
+/// Combines split DDS files back into a single file, handling CryEngine-specific formatting
+/// </summary>
 public class DDSFileCombiner
 {
     private const int DDS_HEADER_SIZE = 128;
-    private const int CRYENGINE_METADATA_SIZE = 168;
     private const int CRYENGINE_END_MARKER_SIZE = 8;
-    private readonly byte[] CRYENGINE_END_MARKER = new byte[] { 0x43, 0x45, 0x78, 0x74, 0x43, 0x45, 0x6E, 0x64 }; // "CExtCEnd"
+    private static readonly byte[] CRYENGINE_END_MARKER = new byte[] { 0x43, 0x45, 0x78, 0x74, 0x43, 0x45, 0x6E, 0x64 }; // "CExtCEnd"
     private const string DDS_EXTENSION = "dds";
 
-    public static string Combine(string baseFileName, string combinedFileNameIdentifier = "combined")
+    /// <summary>
+    /// Combines split DDS files into a single file
+    /// </summary>
+    /// <param name="baseFileName">Path to the header file</param>
+    /// <param name="useSafeName">If true, adds an identifier to the output filename</param>
+    /// <param name="combinedFileNameIdentifier">Identifier to add to the output filename when useSafeName is true</param>
+    /// <returns>Path to the combined file</returns>
+    public static string Combine(string baseFileName, bool useSafeName = false, string combinedFileNameIdentifier = "combined")
+    {
+        ValidateInputParameters(baseFileName);
+
+        var (directory, fileNameWithoutExtension) = PrepareFileInfo(baseFileName);
+        var matchingFiles = FindMatchingFiles(directory, fileNameWithoutExtension);
+
+        var headerFile = matchingFiles[0];
+        var (headerContent, postHeaderData) = ProcessHeaderFile(headerFile);
+
+        if (IsAlreadyValidDDSFile(headerFile, headerContent))
+        {
+            Console.WriteLine($"File {headerFile} is already a valid DDS file. Skipping combining.");
+            return headerFile;
+        }
+
+        var outputPath = CreateOutputPath(directory, fileNameWithoutExtension, useSafeName, combinedFileNameIdentifier);
+        CombineFiles(outputPath, headerContent, postHeaderData, matchingFiles);
+
+        return outputPath;
+    }
+
+    private static void ValidateInputParameters(string baseFileName)
     {
         if (baseFileName is null)
-            return string.Empty;
-        
+            throw new ArgumentNullException(nameof(baseFileName));
+    }
+
+    private static (string directory, string fileNameWithoutExtension) PrepareFileInfo(string baseFileName)
+    {
         string? directory = Path.GetDirectoryName(baseFileName);
-        
         if (directory is null)
-            return baseFileName;
+            throw new DirectoryNotFoundException("Could not determine directory from base file name");
 
-        // If directory doesn't exist, inform the user and exit the program
-        if (!Directory.Exists(directory))
-            throw new Exception("Directory does not exist.");
+        // Remove both extensions (e.g., "file.dds.1" -> "file")
+        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(baseFileName));
+        return (directory, fileNameWithoutExtension);
+    }
 
-        string fileNameWithExtension = Path.GetFileName(baseFileName);
-        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileNameWithExtension);
-        // Check to see if fileNameWithoutExtension still has an extension (AW files).  If so, remove that extension too.
-        fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileNameWithoutExtension);
-
-        // Get all files that start with the base file name and have a numeric extension
-        List<string> filesToCombine = new() { Path.Combine(directory, fileNameWithExtension) };
-
+    private static List<string> FindMatchingFiles(string directory, string fileNameWithoutExtension)
+    {
         var matchingFiles = Directory.GetFiles(directory, $"{fileNameWithoutExtension}*").ToList();
         matchingFiles.RemoveAll(file => file.Contains("combined", StringComparison.OrdinalIgnoreCase));
+        return matchingFiles;
+    }
 
-        // If no files to combine, inform the user and exit the program
-        if (!matchingFiles.Any())
-            throw new Exception("No matching part files found.");
+    private static (byte[] headerContent, byte[] postHeaderData) ProcessHeaderFile(string headerFile)
+    {
+        using var headerStream = File.OpenRead(headerFile);
+        var headerContent = new byte[headerStream.Length];
+        headerStream.Read(headerContent, 0, headerContent.Length);
 
-        // Create a new combined file
-        string combinedFileName = Path.Combine(directory, $"{fileNameWithoutExtension}.{combinedFileNameIdentifier}.{DDS_EXTENSION}");
+        var postHeaderData = new byte[headerContent.Length - DDS_HEADER_SIZE];
+        Array.Copy(headerContent, DDS_HEADER_SIZE, postHeaderData, 0, postHeaderData.Length);
 
-        // If the first file in the list is already a valid DDS file, skip combining
+        return (headerContent, postHeaderData);
+    }
 
+    private static bool IsAlreadyValidDDSFile(string headerFile, byte[] headerContent)
+    {
+        var header = DdsHeaderDeserializer.Deserialize(headerContent);
+        var estimatedMinSize = headerContent.Length + (header.Width * header.Height * header.PixelFormat.Size / 8);
+        var fileSize = new FileInfo(headerFile).Length;
 
-        try
+        return fileSize > estimatedMinSize;
+    }
+
+    private static string CreateOutputPath(string directory, string fileNameWithoutExtension,
+        bool useSafeName, string combinedFileNameIdentifier)
+    {
+        var suffix = useSafeName ? $".{combinedFileNameIdentifier}" : null;
+        return Path.Combine(directory, $"{fileNameWithoutExtension}{suffix}.{DDS_EXTENSION}");
+    }
+
+    private static void CombineFiles(string outputPath, byte[] headerContent, byte[] postHeaderData,
+        List<string> matchingFiles)
+    {
+        using var outputStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
+
+        // Write header
+        outputStream.Write(headerContent, 0, DDS_HEADER_SIZE);
+
+        // Write mipmaps in reverse order
+        for (int i = matchingFiles.Count - 1; i > 0; i--)
         {
-            using FileStream combinedFileStream = new(combinedFileName, FileMode.Create);
-
-            // Iterate over each file and append it to the combined file
-            foreach (string filePath in filesToCombine)
-            {
-                using FileStream partFileStream = new(filePath, FileMode.Open);
-                partFileStream.CopyTo(combinedFileStream);
-                // Align the file to a 4-byte boundary
-                // Pad to 4-byte boundary if necessary
-                var padding = (int)(partFileStream.Length % 4);
-                if (padding > 0)
-                {
-                    var paddingBytes = new byte[4 - padding];
-                    partFileStream.Write(paddingBytes);
-                }
-            }
-
-            return combinedFileName;
+            WriteMipMapWithAlignment(outputStream, matchingFiles[i]);
         }
-        catch (Exception ex)
+
+        // Write footer
+        outputStream.Write(postHeaderData, 0, postHeaderData.Length);
+        outputStream.Write(CRYENGINE_END_MARKER, 0, CRYENGINE_END_MARKER_SIZE);
+    }
+
+    private static void WriteMipMapWithAlignment(FileStream outputStream, string mipmapFile)
+    {
+        if (!File.Exists(mipmapFile))
+            throw new FileNotFoundException($"Mipmap file not found: {mipmapFile}");
+
+        using var mipmapStream = File.OpenRead(mipmapFile);
+        mipmapStream.CopyTo(outputStream);
+
+        // Align to 4 bytes
+        var remainder = mipmapStream.Length % 4;
+        if (remainder > 0)
         {
-            throw new Exception($"An error occurred: {ex.Message}");
+            var padding = new byte[4 - remainder];
+            outputStream.Write(padding, 0, padding.Length);
         }
     }
 }

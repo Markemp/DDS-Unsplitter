@@ -15,7 +15,10 @@ class Program
 
         try
         {
-            string combinedFile = DDSFileCombiner.Combine(args[0]);
+            var useSafeName = false;
+            if (args.Length > 1 && args[1] == "-s" || args[0] == "--safe")
+                useSafeName = true;
+            string combinedFile = DDSFileCombiner.Combine(args[0], useSafeName);
             Console.WriteLine($"Combined file created: {combinedFile}");
         }
         catch (Exception ex)
@@ -32,6 +35,8 @@ class Program
         Console.WriteLine("\nParameters:");
         Console.WriteLine("  filename    The base name of the split DDS files to combine. Can be without the extension.");
         Console.WriteLine("              For example: `defaultnouvs` instead of `defaultnouvs.dds.");
+        Console.WriteLine("  --safe,-s <safeword>  Use this parameter to prevent overwriting the original .dds file.  ");
+        Console.WriteLine("              The word '.combined' will be added before the file extension unless a safeword is specified.");
         Console.WriteLine("\nExample:");
         Console.WriteLine("  DDS-Unsplitter.exe texture.dds");
         Console.WriteLine("\nNote: Split files should be in the same directory and numbered sequentially (.0, .1, .2, etc.).");
