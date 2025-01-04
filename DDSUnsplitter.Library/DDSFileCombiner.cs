@@ -1,4 +1,5 @@
-﻿using static DDSUnsplitter.Library.Models.DdsConstants;
+﻿using DDSUnsplitter.Library.Models;
+using static DDSUnsplitter.Library.Models.DdsConstants;
 
 namespace DDSUnsplitter.Library;
 
@@ -97,18 +98,23 @@ public class DDSFileCombiner
         var headerContent = new byte[headerStream.Length];
         headerStream.Read(headerContent, 0, headerContent.Length);
 
-        // Properly deconstruct both header objects
+        // Deserialize to check for DXT10
         var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(headerContent);
-        int totalHeaderSize = DDS_HEADER_SIZE + (dxt10Header != null ? DXT10_HEADER_SIZE : 0);
 
-        // Get post-header data after both headers if present
-        var postHeaderData = new byte[headerContent.Length - totalHeaderSize];
-        Array.Copy(headerContent, totalHeaderSize, postHeaderData, 0, postHeaderData.Length);
+        // Calculate where the actual post-header data starts
+        int headerSize = DdsConstants.DDS_HEADER_SIZE +
+                        (dxt10Header != null ? DdsConstants.DXT10_HEADER_SIZE : 0);
+
+        // Calculate the size of the post-header data
+        int postHeaderSize = headerContent.Length - headerSize;
+
+        // Extract only the true post-header data (after both headers)
+        var postHeaderData = new byte[postHeaderSize];
+        Array.Copy(headerContent, headerSize, postHeaderData, 0, postHeaderSize);
 
         return (headerContent, postHeaderData);
     }
 
-    
 
     private static bool IsAlreadyValidDDSFile(string headerFile)
     {
@@ -147,10 +153,14 @@ public class DDSFileCombiner
     private static void CombineFiles(string outputPath, byte[] headerContent, byte[] postHeaderData,
         List<string> matchingFiles)
     {
+        // Deserialize to check for DXT10
+        var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(headerContent);
+        int totalHeaderSize = DDS_HEADER_SIZE + (dxt10Header != null ? DXT10_HEADER_SIZE : 0);
+
         using var outputStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
 
-        // Write header
-        outputStream.Write(headerContent, 0, DDS_HEADER_SIZE);
+        // Write both headers
+        outputStream.Write(headerContent, 0, totalHeaderSize);
 
         // Write mipmaps in reverse order
         for (int i = matchingFiles.Count - 1; i > 0; i--)

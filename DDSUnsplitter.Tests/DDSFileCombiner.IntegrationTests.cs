@@ -65,37 +65,82 @@ public class DDSFileCombinerTests
     }
 
     [Test]
-    [TestCase(@"d:\depot\sc3.24\data\textures\defaults\defaultnouvs")]
-    [TestCase(@"D:\depot\ArmoredWarfare\textures\defaults\flat_normal_ddn")]
-    public void WhenCombining_WithJustPath_HandlesPathCorrectly(string baseFileName)
+    [TestCase("defaultnouvs", new[] { 296, 512, 2048, 8192, 32768, 131072 }, false, 8, "", false)]
+    [TestCase("flat_normal_ddn", new[] { 464, 1024, 4096, 16384 }, false, 6, "ATI2", true)]
+    public void WhenCombining_WithJustPath_HandlesPathCorrectly(
+    string fileName,
+    int[] expectedSizes,
+    bool hasDxt10Header,
+    int expectedMipmapCount,
+    string expectedFourCC,
+    bool hasNumberedHeader)
     {
-        // Skip test if path doesn't exist
-        Assume.That(Directory.Exists(Path.GetDirectoryName(baseFileName)),
-            "Test directory not available - skipping test");
+        string baseFileName = Path.Combine(TEST_FILES_DIR, fileName);
+
+        // Skip test if files don't exist
+        string headerPattern = hasNumberedHeader ? ".dds.0" : ".dds";
+        Assume.That(File.Exists(baseFileName + headerPattern),
+            "Test files not available - skipping test");
 
         string tempPath = CopyFilesToTemp(baseFileName);
 
         string combinedFileName = DDSFileCombiner.Combine(tempPath, true);
 
-        Assert.That(File.Exists(combinedFileName), "Combined file was not created");
-        // Verify the combined file was created in our temp directory
-        Assert.That(combinedFileName, Does.StartWith(_tempDir),
-            "Combined file was created outside temp directory");
-    }
+        Assert.Multiple(() =>
+        {
+            // Verify file existence and location
+            Assert.That(File.Exists(combinedFileName), "Combined file was not created");
+            Assert.That(combinedFileName, Does.StartWith(_tempDir),
+                "Combined file was created outside temp directory");
 
-    [Test]
-    public void WhenCombining_WithMetadataEnding_HandlesFileCorrectly()
-    {
-        string baseFileName = @"D:\depot\ArmoredWarfare\textures\defaults\flat_normal_ddn.dds.0";
+            // Verify headers
+            var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(File.ReadAllBytes(combinedFileName));
 
-        Assume.That(File.Exists(baseFileName), "Test file not available - skipping test");
+            // Check header format
+            if (hasDxt10Header)
+            {
+                Assert.That(new string(header.PixelFormat.FourCC), Is.EqualTo("DX10"),
+                    "File should have DX10 FourCC");
+                Assert.That(dxt10Header, Is.Not.Null, "DXT10 header should be present");
+            }
+            else if (!string.IsNullOrEmpty(expectedFourCC))
+            {
+                Assert.That(new string(header.PixelFormat.FourCC), Is.EqualTo(expectedFourCC),
+                    "File should have expected FourCC");
+                Assert.That(dxt10Header, Is.Null, "DXT10 header should not be present");
+            }
 
-        string tempPath = CopyFilesToTemp(baseFileName);
-        string combinedFileName = DDSFileCombiner.Combine(tempPath, true);
+            // Verify file size
+            var combinedFileSize = new FileInfo(combinedFileName).Length;
+            var expectedTotalSize = expectedSizes.Sum() + CRYENGINE_END_MARKER_SIZE;
 
-        Assert.That(File.Exists(combinedFileName), "Combined file was not created");
-        Assert.That(combinedFileName, Does.StartWith(_tempDir),
-            "Combined file was created outside temp directory");
+            Assert.That(combinedFileSize, Is.EqualTo(expectedTotalSize),
+                "Combined file size doesn't match expected size");
+
+            // Verify end marker
+            using var stream = File.OpenRead(combinedFileName);
+            stream.Seek(-CRYENGINE_END_MARKER_SIZE, SeekOrigin.End);
+            var endMarker = new byte[CRYENGINE_END_MARKER_SIZE];
+            stream.Read(endMarker, 0, CRYENGINE_END_MARKER_SIZE);
+            Assert.That(endMarker, Is.EqualTo(CRYENGINE_END_MARKER),
+                "CryEngine end marker not found or incorrect");
+
+            // Verify mipmap count in header matches expected
+            Assert.That(header.MipMapCount, Is.EqualTo(expectedMipmapCount),
+                "MipMap count in header doesn't match expected count");
+
+            // Verify number of data files matches expected sizes array length minus header
+            var searchPattern = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(tempPath)) + ".dds.*";
+            var dataFiles = Directory.GetFiles(Path.GetDirectoryName(tempPath)!, searchPattern)
+                .Where(f => !f.EndsWith("a", StringComparison.OrdinalIgnoreCase) &&
+                           Path.GetExtension(f).Length > 1 &&
+                           Path.GetExtension(f).TrimStart('.').All(char.IsDigit))
+                .ToList();
+
+            var expectedFileCount = hasNumberedHeader ? expectedSizes.Length : expectedSizes.Length - 1;
+            Assert.That(dataFiles.Count, Is.EqualTo(expectedFileCount),
+                $"Number of data files doesn't match expected count. Search pattern was: {searchPattern}");
+        });
     }
 
     [Test]
