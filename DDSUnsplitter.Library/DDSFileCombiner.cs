@@ -162,16 +162,60 @@ public class DDSFileCombiner
         // Write both headers
         outputStream.Write(headerContent, 0, totalHeaderSize);
 
-        // Write mipmaps in reverse order
-        for (int i = matchingFiles.Count - 1; i > 0; i--)
+        //DDS_SURFACE_FLAGS_CUBEMAP
+        var faces = (header.Caps & 0x8) != 0 ? 6 : 1;
+
+        var mipMapSizes = GetMipMapSizes(header);
+        var mipMapBytes = matchingFiles
+            .Skip(1)// Skip the header file
+            .OrderDescending()
+            .Select(File.ReadAllBytes).ToArray();
+
+        var postHeaderDataOffset = 0;
+        for (var cubeFace = 0; cubeFace < faces; cubeFace++)
         {
-            WriteMipMapWithAlignment(outputStream, matchingFiles[i]);
+            for (var mipMap = 0; mipMap < header.MipMapCount; mipMap++)
+            {
+                var mipMapSize = mipMapSizes[mipMap];
+                var mipMapByteCount = GetMipmapSize(mipMapSize.Width, mipMapSize.Height);
+
+                if (mipMap < mipMapBytes.Length)
+                {
+                    //larger mipmaps are in separate files
+                    outputStream.Write(mipMapBytes[mipMap], cubeFace * mipMapByteCount, mipMapByteCount);
+                }
+                else
+                {
+                    // Small mipmaps are at the end of the main file
+                    outputStream.Write(postHeaderData, postHeaderDataOffset, mipMapByteCount);
+                    postHeaderDataOffset += mipMapByteCount;
+                }
+            }
         }
 
         // Write footer
-        outputStream.Write(postHeaderData, 0, postHeaderData.Length);
         outputStream.Write(CRYENGINE_END_MARKER, 0, CRYENGINE_END_MARKER_SIZE);
     }
+
+    private static (int Width, int Height)[] GetMipMapSizes(DdsHeader header)
+    {
+        var mipMapSizes = new (int Width, int Height)[header.MipMapCount];
+
+        for (var i = 0; i < header.MipMapCount; i++)
+        {
+            var width = Math.Max((int)(header.Width / Math.Pow(2, i)), 1);
+            var height = Math.Max((int)(header.Height / Math.Pow(2, i)), 1);
+            mipMapSizes[i] = (width, height);
+        }
+
+        return mipMapSizes;
+    }
+
+    private static int GetMipmapSize(int width, int height)
+    {
+        return Math.Max(1, (width + 3) / 4) * Math.Max(1, (height + 3) / 4) * 16;
+    }
+
 
     private static void WriteMipMapWithAlignment(FileStream outputStream, string mipmapFile)
     {
