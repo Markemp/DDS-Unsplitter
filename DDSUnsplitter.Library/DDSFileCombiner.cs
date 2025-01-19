@@ -115,7 +115,6 @@ public class DDSFileCombiner
         return (headerContent, postHeaderData);
     }
 
-
     private static bool IsAlreadyValidDDSFile(string headerFile)
     {
         using var stream = File.OpenRead(headerFile);
@@ -153,47 +152,56 @@ public class DDSFileCombiner
     private static void CombineFiles(string outputPath, byte[] headerContent, byte[] postHeaderData,
         List<string> matchingFiles)
     {
-        // Deserialize to check for DXT10
         var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(headerContent);
         int totalHeaderSize = DDS_HEADER_SIZE + (dxt10Header != null ? DXT10_HEADER_SIZE : 0);
 
         using var outputStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
-
-        // Write both headers
         outputStream.Write(headerContent, 0, totalHeaderSize);
 
-        //DDS_SURFACE_FLAGS_CUBEMAP
-        var faces = (header.Caps & 0x8) != 0 ? 6 : 1;
+        var isCubeMap = (header.Caps2 & 0x200) != 0;
+        var faces = isCubeMap ? 6 : 1;
 
         var mipMapSizes = GetMipMapSizes(header);
         var mipMapBytes = matchingFiles
-            .Skip(1)// Skip the header file
+            .Skip(1) // Skip the header file
             .OrderDescending()
             .Select(File.ReadAllBytes).ToArray();
 
         var postHeaderDataOffset = 0;
+
+        // For cubemaps, we need to organize the data by face first
         for (var cubeFace = 0; cubeFace < faces; cubeFace++)
         {
             for (var mipMap = 0; mipMap < header.MipMapCount; mipMap++)
             {
                 var mipMapSize = mipMapSizes[mipMap];
-                var mipMapByteCount = GetMipmapSize(mipMapSize.Width, mipMapSize.Height);
+                var mipMapByteCount = GetMipmapSize(mipMapSize.Width, mipMapSize.Height, header.PixelFormat);
 
                 if (mipMap < mipMapBytes.Length)
                 {
-                    //larger mipmaps are in separate files
-                    outputStream.Write(mipMapBytes[mipMap], cubeFace * mipMapByteCount, mipMapByteCount);
+                    // For cubemaps, each mipmap file should contain all faces
+                    // So we read from the appropriate face offset within each mipmap file
+                    var faceOffset = isCubeMap ? (cubeFace * mipMapByteCount) : 0;
+                    if (faceOffset + mipMapByteCount <= mipMapBytes[mipMap].Length)
+                        outputStream.Write(mipMapBytes[mipMap], faceOffset, mipMapByteCount);
+                    else
+                        throw new InvalidOperationException($"Mipmap file {mipMap} doesn't contain expected face data at offset {faceOffset}");
                 }
                 else
                 {
-                    // Small mipmaps are at the end of the main file
-                    outputStream.Write(postHeaderData, postHeaderDataOffset, mipMapByteCount);
-                    postHeaderDataOffset += mipMapByteCount;
+                    // For the small mipmaps in the main file
+                    var faceOffset = isCubeMap ? (cubeFace * mipMapByteCount) : 0;
+                    if (postHeaderDataOffset + mipMapByteCount <= postHeaderData.Length)
+                    {
+                        outputStream.Write(postHeaderData, postHeaderDataOffset, mipMapByteCount);
+                        postHeaderDataOffset += mipMapByteCount;
+                    }
+                    else
+                        throw new InvalidOperationException($"Post-header data doesn't contain expected mipmap data at offset {postHeaderDataOffset}");
                 }
             }
         }
 
-        // Write footer
         outputStream.Write(CRYENGINE_END_MARKER, 0, CRYENGINE_END_MARKER_SIZE);
     }
 
@@ -211,26 +219,27 @@ public class DDSFileCombiner
         return mipMapSizes;
     }
 
-    private static int GetMipmapSize(int width, int height)
+    private static int GetMipmapSize(int width, int height, DdsPixelFormat pixelFormat)
     {
-        return Math.Max(1, (width + 3) / 4) * Math.Max(1, (height + 3) / 4) * 16;
+        int blockSize = IsDXT1(pixelFormat) ? 8 : 16;
+        return Math.Max(1, (width + 3) / 4) * Math.Max(1, (height + 3) / 4) * blockSize;
     }
 
+    private static bool IsDXT1(DdsPixelFormat pixelFormat)=> pixelFormat.GetFourCCString() == "DXT1";
 
-    private static void WriteMipMapWithAlignment(FileStream outputStream, string mipmapFile)
-    {
-        if (!File.Exists(mipmapFile))
-            throw new FileNotFoundException($"Mipmap file not found: {mipmapFile}");
+    //private static void WriteMipMapWithAlignment(FileStream outputStream, string mipmapFile)
+    //{
+    //    if (!File.Exists(mipmapFile))
+    //        throw new FileNotFoundException($"Mipmap file not found: {mipmapFile}");
 
-        using var mipmapStream = File.OpenRead(mipmapFile);
-        mipmapStream.CopyTo(outputStream);
+    //    using var mipmapStream = File.OpenRead(mipmapFile);
+    //    mipmapStream.CopyTo(outputStream);
 
-        // Align to 4 bytes
-        var remainder = mipmapStream.Length % 4;
-        if (remainder > 0)
-        {
-            var padding = new byte[4 - remainder];
-            outputStream.Write(padding, 0, padding.Length);
-        }
-    }
+    //    // Align to 4 bytes
+    //    var remainder = mipmapStream.Length % 4;
+    //    if (remainder > 0)
+    //    {
+    //        var padding = new byte[4 - remainder];
+    //        outputStream.Write(padding, 0, padding.Length);
+    //    }
 }

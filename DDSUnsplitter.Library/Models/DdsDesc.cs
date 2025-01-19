@@ -1,12 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace DDSUnsplitter.Library.Models;
 
-namespace DDSUnsplitter.Library.Models
+public class DDSDesc
 {
-    internal class DdsDesc
-    {
-    }
+    public string Name { get; set; }
+    public uint Width { get; set; }
+    public uint Height { get; set; }
+    public uint Depth { get; set; }
+    public uint Mips { get; set; }
+    public uint MipsPersistent { get; set; }
+    public uint Sides { get; set; }
+    public uint BaseOffset { get; set; }
+    public uint Flags { get; set; }
+    //public TextureFormat Format { get; set; }
+    //public TileMode TileMode { get; set; }
 }

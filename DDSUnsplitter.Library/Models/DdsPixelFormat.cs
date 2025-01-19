@@ -13,6 +13,8 @@ public sealed record DdsPixelFormat
     public uint GBitMask { get; init; }
     public uint BBitMask { get; init; }
     public uint ABitMask { get; init; }
+
+    public string GetFourCCString() => new(FourCC);
 }
 
 [Flags]
