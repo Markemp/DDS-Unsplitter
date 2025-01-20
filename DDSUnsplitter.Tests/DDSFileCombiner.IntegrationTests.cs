@@ -146,7 +146,7 @@ public class DDSFileCombinerTests
     [Test]
     public void Combine_SCWithCreatesCombinedFile()
     {
-        string baseFileName = $@"TestFiles\defaultnouvs.dds";
+        string baseFileName = Path.Combine("TestFiles", "defaultnouvs.dds");
         var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(File.ReadAllBytes(baseFileName));
 
         Assert.Multiple(() =>
