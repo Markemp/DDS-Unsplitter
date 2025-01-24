@@ -19,7 +19,7 @@ public enum DDS_ALPHA_MODE : uint
     DDS_ALPHA_MODE_CUSTOM = 0x4
 }
 
-public sealed record DXT10Header
+public sealed record DdsHeaderDXT10
 {
     public DXGI_FORMAT DxgiFormat { get; init; }
     public D3D10_RESOURCE_DIMENSION ResourceDimension { get; init; }

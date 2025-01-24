@@ -5,7 +5,7 @@ using static DDSUnsplitter.Library.Models.DdsConstants;
 
 public static class DdsHeaderDeserializer
 {
-    public static (DdsHeader Header, DXT10Header? DXT10) Deserialize(byte[] headerContent)
+    public static (DdsHeader Header, DdsHeaderDXT10? DXT10) Deserialize(byte[] headerContent)
     {
         ValidateHeaderContent(headerContent);
 
@@ -25,15 +25,15 @@ public static class DdsHeaderDeserializer
             MipMapCount = reader.ReadInt32(),
             Reserved1 = ReadReserved1(reader),
             PixelFormat = ReadPixelFormat(reader),
-            Caps = reader.ReadInt32(),
-            Caps2 = reader.ReadInt32(),
-            Caps3 = reader.ReadInt32(),
-            Caps4 = reader.ReadInt32(),
+            Caps = (DDSCaps)reader.ReadInt32(),
+            Caps2 = (DDSCaps2)reader.ReadInt32(),
+            Caps3 = (DDSCaps3)reader.ReadInt32(),
+            Caps4 = (DDSCaps4)reader.ReadInt32(),
             Reserved2 = reader.ReadInt32()
         };
 
         // Check if there's a DXT10 header and if we have enough data to read it
-        DXT10Header? dxt10Header = null;
+        DdsHeaderDXT10? dxt10Header = null;
         if (IsDXT10Format(header) && ms.Position + DXT10_HEADER_SIZE <= ms.Length)
             dxt10Header = ReadDXT10Header(reader);
 
@@ -73,9 +73,9 @@ public static class DdsHeaderDeserializer
         };
     }
 
-    private static DXT10Header ReadDXT10Header(BinaryReader reader)
+    private static DdsHeaderDXT10 ReadDXT10Header(BinaryReader reader)
     {
-        return new DXT10Header
+        return new DdsHeaderDXT10
         {
             DxgiFormat = (DXGI_FORMAT)reader.ReadUInt32(),
             ResourceDimension = (D3D10_RESOURCE_DIMENSION)reader.ReadUInt32(),
@@ -87,10 +87,8 @@ public static class DdsHeaderDeserializer
 
     private static void ValidateHeaderContent(byte[] headerContent)
     {
-        if (headerContent == null)
-        {
+        if (headerContent is null)
             throw new ArgumentNullException(nameof(headerContent));
-        }
 
         if (headerContent.Length < DDS_HEADER_SIZE)
         {

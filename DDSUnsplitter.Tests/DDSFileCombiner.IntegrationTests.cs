@@ -189,6 +189,24 @@ public class DDSFileCombinerTests
     }
 
     [Test]
+    public void WhenCombining_DXT10NormalMap_GlossFilesAddedProperly()
+    {
+        string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
+        string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
+
+    }
+
+    [Test]
+    public void FindMatchingFiles_GlossFilesReturnsAllFiles()
+    {
+        string baseFileName = "gloss10_ddna";
+        var actualFiles = DDSFileCombiner.FindMatchingFiles(TEST_FILES_DIR, baseFileName);
+        Assert.That(actualFiles.Count, Is.EqualTo(8));
+        Assert.That(actualFiles[7], Is.EqualTo("TestFiles\\gloss10_ddna.dds.a"));
+        Assert.That(actualFiles[0], Is.EqualTo("TestFiles\\gloss10_ddna.dds"));
+    }
+
+    [Test]
     public void WhenCombining_DXT10File_SkipsAVariants()
     {
         string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
