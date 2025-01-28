@@ -146,7 +146,7 @@ public class DDSFileCombinerTests
     [Test]
     public void Combine_SCWithCreatesCombinedFile()
     {
-        string baseFileName = $@"TestFiles\defaultnouvs.dds";
+        string baseFileName = Path.Combine("TestFiles", "defaultnouvs.dds");
         var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(File.ReadAllBytes(baseFileName));
 
         Assert.Multiple(() =>
@@ -186,6 +186,24 @@ public class DDSFileCombinerTests
                 "Should be a 2D texture");
             Assert.That(dxt10Header.ArraySize, Is.EqualTo(1), "Array size should be 1");
         });
+    }
+
+    [Test]
+    public void WhenCombining_DXT10NormalMap_GlossFilesAddedProperly()
+    {
+        string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
+        string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
+
+    }
+
+    [Test]
+    public void FindMatchingFiles_GlossFilesReturnsAllFiles()
+    {
+        string baseFileName = "gloss10_ddna";
+        var actualFiles = DDSFileCombiner.FindMatchingFiles(TEST_FILES_DIR, baseFileName);
+        Assert.That(actualFiles.Count, Is.EqualTo(8));
+        Assert.That(actualFiles[7], Is.EqualTo("TestFiles\\gloss10_ddna.dds.a"));
+        Assert.That(actualFiles[0], Is.EqualTo("TestFiles\\gloss10_ddna.dds"));
     }
 
     [Test]
