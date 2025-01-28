@@ -17,13 +17,15 @@ public class DDSFileCombiner
     /// <returns>Path to the combined file</returns>
     public static string Combine(string baseFileName, bool useSafeName = false, string combinedFileNameIdentifier = "combined")
     {
-        ValidateInputParameters(baseFileName);
+        if (baseFileName is null)
+            throw new ArgumentNullException(nameof(baseFileName));
 
         var (directory, fileNameWithoutExtension) = PrepareFileInfo(baseFileName);
         var matchingFiles = FindMatchingFiles(directory, fileNameWithoutExtension);
 
         var headerFile = matchingFiles[0];
-        var headerContent = ProcessHeaderFile(headerFile);
+
+        var headerInfo = DdsHeader.Deserialize(headerFile);
 
         if (IsAlreadyValidDDSFile(headerFile))
         {
@@ -32,15 +34,9 @@ public class DDSFileCombiner
         }
 
         var outputPath = CreateOutputPath(directory, fileNameWithoutExtension, useSafeName, combinedFileNameIdentifier);
-        CombineFiles(outputPath, headerContent, matchingFiles);
+        CombineFiles(outputPath, headerInfo, matchingFiles);
 
         return outputPath;
-    }
-
-    private static void ValidateInputParameters(string baseFileName)
-    {
-        if (baseFileName is null)
-            throw new ArgumentNullException(nameof(baseFileName));
     }
 
     private static (string directory, string fileNameWithoutExtension) PrepareFileInfo(string baseFileName)
@@ -64,75 +60,36 @@ public class DDSFileCombiner
         return matchingFiles;
     }
 
-    //private static (byte[] headerContent, byte[] postHeaderData) ProcessHeaderFile(string headerFile)
-    //{
-    //    using var headerStream = File.OpenRead(headerFile);
-    //    var headerContent = new byte[headerStream.Length];
-    //    headerStream.Read(headerContent, 0, headerContent.Length);
-
-    //    // Deserialize to check for DXT10
-    //    var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(headerContent);
-
-    //    // Calculate where the actual post-header data starts
-    //    int headerSize = DdsConstants.DDS_HEADER_SIZE +
-    //                    (dxt10Header != null ? DdsConstants.DXT10_HEADER_SIZE : 0);
-
-    //    // Calculate the size of the post-header data
-    //    int postHeaderSize = headerContent.Length - headerSize;
-
-    //    // Extract only the true post-header data (after both headers)
-    //    var postHeaderData = new byte[postHeaderSize];
-    //    Array.Copy(headerContent, headerSize, postHeaderData, 0, postHeaderSize);
-
-    //    return (headerContent, postHeaderData);
-    //}
-
-    private static HeaderInfo ProcessHeaderFile(string headerFile)
+    private static bool IsAlreadyValidDDSFile(HeaderInfo headerInfo, string file)
     {
-        using var headerStream = File.OpenRead(headerFile);
-        var headerContent = new byte[headerStream.Length];
-        headerStream.Read(headerContent, 0, headerContent.Length);
+        if (headerInfo is null)
+            ArgumentNullException.ThrowIfNull(headerInfo);
 
-        var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(headerContent);
-        int headerSize = DDS_HEADER_SIZE +
-                        (dxt10Header != null ? DXT10_HEADER_SIZE : 0);
 
-        var postHeaderData = new byte[headerContent.Length - headerSize];
-        Array.Copy(headerContent, headerSize, postHeaderData, 0, postHeaderData.Length);
-
-        return new HeaderInfo
-        {
-            Header = header,
-            DXT10Header = dxt10Header,
-            PostHeaderData = postHeaderData
-        };
-    }
-
-    private static bool IsAlreadyValidDDSFile(string headerFile)
-    {
-        using var stream = File.OpenRead(headerFile);
-        if (stream.Length < CRYENGINE_END_MARKER_SIZE)
-            return false;
-
-        // Read and check headers with proper tuple deconstruction
-        var headerData = new byte[DDS_HEADER_SIZE];
-        stream.Read(headerData, 0, DDS_HEADER_SIZE);
-        var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(headerData);
+        //// Read and check headers with proper tuple deconstruction
+        //var headerData = new byte[DDS_HEADER_SIZE];
+        //stream.Read(headerData, 0, DDS_HEADER_SIZE);
+        //var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(headerData);
 
         // Calculate minimum valid size based on headers present
         int minSize = DDS_HEADER_SIZE +
-                     (dxt10Header != null ? DXT10_HEADER_SIZE : 0) +
+                     (headerInfo.DXT10Header != null ? DXT10_HEADER_SIZE : 0) +
                      CRYENGINE_END_MARKER_SIZE;
 
-        if (stream.Length < minSize)
-            return false;
+        FileInfo headerFileInfo = new(file);
+        if (headerFileInfo.Length > minSize)
+            return true;
 
-        // Check end marker
-        stream.Seek(-CRYENGINE_END_MARKER_SIZE, SeekOrigin.End);
-        var endMarker = new byte[CRYENGINE_END_MARKER_SIZE];
-        stream.Read(endMarker, 0, CRYENGINE_END_MARKER_SIZE);
+        //if (stream.Length < minSize)
+        //    return false;
 
-        return endMarker.SequenceEqual(CRYENGINE_END_MARKER);
+        //// Check end marker
+        //stream.Seek(-CRYENGINE_END_MARKER_SIZE, SeekOrigin.End);
+        //var endMarker = new byte[CRYENGINE_END_MARKER_SIZE];
+        //stream.Read(endMarker, 0, CRYENGINE_END_MARKER_SIZE);
+
+        //return endMarker.SequenceEqual(CRYENGINE_END_MARKER);
+        return false;
     }
 
     private static string CreateOutputPath(string directory, string fileNameWithoutExtension,
@@ -245,10 +202,10 @@ public class DDSFileCombiner
     //        outputStream.Write(padding, 0, padding.Length);
     //    }
 
-    private class HeaderInfo
-    {
-        public DdsHeader Header { get; set; }
-        public DdsHeaderDXT10? DXT10Header { get; set; }
-        public byte[] PostHeaderData { get; set; }
-    }
+    //public class HeaderInfo
+    //{
+    //    public DdsHeader Header { get; set; }
+    //    public DdsHeaderDXT10? DXT10Header { get; set; }
+    //    public byte[] PostHeaderData { get; set; }
+    //}
 }
