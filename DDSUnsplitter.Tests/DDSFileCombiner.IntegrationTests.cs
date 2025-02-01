@@ -180,9 +180,9 @@ public class DDSFileCombinerTests
 
             // Verify DXT10 header is present and correct
             Assert.That(dxt10Header, Is.Not.Null, "DXT10 header should be present");
-            Assert.That(dxt10Header!.DxgiFormat, Is.EqualTo(DXGI_FORMAT.DXGI_FORMAT_BC5_SNORM),
+            Assert.That(dxt10Header!.DxgiFormat, Is.EqualTo(DxgiFormat.DXGI_FORMAT_BC5_SNORM),
                 "Should be BC5_SNORM format for normal maps");
-            Assert.That(dxt10Header.ResourceDimension, Is.EqualTo(D3D10_RESOURCE_DIMENSION.D3D10_RESOURCE_DIMENSION_TEXTURE2D),
+            Assert.That(dxt10Header.ResourceDimension, Is.EqualTo(D3D10ResourceDimension.D3D10_RESOURCE_DIMENSION_TEXTURE2D),
                 "Should be a 2D texture");
             Assert.That(dxt10Header.ArraySize, Is.EqualTo(1), "Array size should be 1");
         });

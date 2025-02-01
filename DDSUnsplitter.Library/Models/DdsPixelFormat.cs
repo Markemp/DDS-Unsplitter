@@ -8,7 +8,7 @@ public sealed record DdsPixelFormat
 
     public char[] FourCC { get; init; } = new char[4];
 
-    public uint RGBBitCount { get; init; }
+    public int RGBBitCount { get; init; }
     public uint RBitMask { get; init; }
     public uint GBitMask { get; init; }
     public uint BBitMask { get; init; }

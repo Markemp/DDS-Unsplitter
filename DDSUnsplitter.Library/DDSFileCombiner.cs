@@ -24,10 +24,12 @@ public class DDSFileCombiner
         var matchingFiles = FindMatchingFiles(directory, fileNameWithoutExtension);
 
         var headerFile = matchingFiles[0];
+        var headerFileInfo = new FileInfo(headerFile);
+        var headerFileLength = headerFileInfo.Length;
 
         var headerInfo = DdsHeader.Deserialize(headerFile);
 
-        if (IsAlreadyValidDDSFile(headerFile))
+        if (IsAlreadyValidDDSFile(headerInfo, headerFileInfo))
         {
             Console.WriteLine($"File {headerFile} is already a valid DDS file. Skipping combining.");
             return headerFile;
@@ -60,36 +62,120 @@ public class DDSFileCombiner
         return matchingFiles;
     }
 
-    private static bool IsAlreadyValidDDSFile(HeaderInfo headerInfo, string file)
+    private static bool IsAlreadyValidDDSFile(HeaderInfo headerInfo, FileInfo file)
     {
         if (headerInfo is null)
             ArgumentNullException.ThrowIfNull(headerInfo);
 
+        var offsets = CalculateMipmapOffsets(headerInfo);
 
-        //// Read and check headers with proper tuple deconstruction
-        //var headerData = new byte[DDS_HEADER_SIZE];
-        //stream.Read(headerData, 0, DDS_HEADER_SIZE);
-        //var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(headerData);
-
-        // Calculate minimum valid size based on headers present
-        int minSize = DDS_HEADER_SIZE +
-                     (headerInfo.DXT10Header != null ? DXT10_HEADER_SIZE : 0) +
-                     CRYENGINE_END_MARKER_SIZE;
-
-        FileInfo headerFileInfo = new(file);
-        if (headerFileInfo.Length > minSize)
+        if (offsets.Count == 0)
             return true;
 
-        //if (stream.Length < minSize)
-        //    return false;
+        // Check if file is long enough to contain all separate mipmaps
+        return file.Length >= offsets[^1];
+    }
 
-        //// Check end marker
-        //stream.Seek(-CRYENGINE_END_MARKER_SIZE, SeekOrigin.End);
-        //var endMarker = new byte[CRYENGINE_END_MARKER_SIZE];
-        //stream.Read(endMarker, 0, CRYENGINE_END_MARKER_SIZE);
+    public static List<long> CalculateMipmapOffsets(HeaderInfo headerInfo)
+    {
+        var header = headerInfo.Header;
+        int width = header.Width;
+        int height = header.Height;
+        int totalMipCount = header.MipMapCount;
 
-        //return endMarker.SequenceEqual(CRYENGINE_END_MARKER);
-        return false;
+        // Calculate how many mips are in separate files by finding the highest numbered extension
+        // This assumes the files are numbered sequentially from 1 to N
+        int separateMipCount = 3; // From your example, but should be determined by checking files
+
+        // The number of small mips stored in PostHeaderData
+        int smallMipsInHeader = totalMipCount - separateMipCount;
+
+        List<long> offsets = [];
+        long currentOffset = GetInitialOffset(headerInfo);
+
+        // Calculate offsets only for the separate mips (larger ones)
+        for (int i = 0; i < separateMipCount; i++)
+        {
+            offsets.Add(currentOffset);
+
+            int mipWidth = Math.Max(1, width >> i);
+            int mipHeight = Math.Max(1, height >> i);
+
+            int mipSize = CalculateMipSize(mipWidth, mipHeight, headerInfo);
+
+            // Align to 4-byte boundary
+            mipSize = (mipSize + 3) & ~3;
+
+            currentOffset += mipSize;
+        }
+
+        return offsets;
+    }
+
+    private static int CalculateMipSize(int width, int height, HeaderInfo headerInfo)
+    {
+        if (headerInfo.DXT10Header is not null)
+            return CalculateMipSizeDX10(width, height, headerInfo.DXT10Header.DxgiFormat);
+        else
+            return CalculateMipSizeLegacy(width, height, headerInfo.Header.PixelFormat);
+    }
+
+    private static int CalculateMipSizeDX10(int width, int height, DxgiFormat format)
+    {
+        int blockSize;
+        int blockWidth;
+        int blockHeight;
+
+        switch (format)
+        {
+            case DxgiFormat.BC1_UNORM:
+            case DxgiFormat.BC1_UNORM_SRGB:
+                blockSize = 8;
+                blockWidth = blockHeight = 4;
+                break;
+
+            case DxgiFormat.BC2_UNORM:
+            case DxgiFormat.BC2_UNORM_SRGB:
+            case DxgiFormat.BC3_UNORM:
+            case DxgiFormat.BC3_UNORM_SRGB:
+                blockSize = 16;
+                blockWidth = blockHeight = 4;
+                break;
+
+            // Add other DXGI formats as needed
+
+            default:
+                throw new NotSupportedException($"DXGI format {format} not supported");
+        }
+
+        int blocksWide = (width + blockWidth - 1) / blockWidth;
+        int blocksHigh = (height + blockHeight - 1) / blockHeight;
+
+        return blocksWide * blocksHigh * blockSize;
+    }
+
+    private static int CalculateMipSizeLegacy(int width, int height, DdsPixelFormat pixelFormat)
+    {
+        // Handle legacy DDS formats (DXT1, DXT3, DXT5, etc.)
+        if ((pixelFormat.Flags & pixelFormat.Flags) != 0)
+        {
+            switch (pixelFormat.FourCC.ToString())
+            {
+                case "DXT1":
+                    return ((width + 3) / 4) * ((height + 3) / 4) * 8;
+
+                case "DXT3":
+                case "DXT5":
+                    return ((width + 3) / 4) * ((height + 3) / 4) * 16;
+
+                default:
+                    throw new NotSupportedException($"FourCC format {pixelFormat.FourCC} not supported");
+            }
+        }
+
+        // Handle uncompressed formats
+        int bpp = pixelFormat.RGBBitCount;
+        return ((width * height * bpp + 7) / 8);
     }
 
     private static string CreateOutputPath(string directory, string fileNameWithoutExtension,
@@ -185,6 +271,19 @@ public class DDSFileCombiner
     }
 
     private static bool IsDXT1(DdsPixelFormat pixelFormat)=> pixelFormat.GetFourCCString() == "DXT1";
+
+    private static int GetInitialOffset(HeaderInfo headerInfo)
+    {
+        int offset = sizeof(DdsHeader); // 128 bytes
+
+        if (headerInfo.DXT10Header is not null)
+            offset += sizeof(DdsHeaderDXT10); // Add DXT10 header size
+
+        if (headerInfo.PostHeaderData != null)
+            offset += headerInfo.PostHeaderData.Length;
+
+        return offset;
+    }
 
     //private static void WriteMipMapWithAlignment(FileStream outputStream, string mipmapFile)
     //{

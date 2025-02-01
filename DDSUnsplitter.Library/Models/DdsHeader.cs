@@ -162,11 +162,11 @@ public sealed record DdsHeader
     private static DdsHeaderDXT10 ReadDXT10Header(BinaryReader reader) =>
         new()
         {
-            DxgiFormat = (DXGI_FORMAT)reader.ReadUInt32(),
-            ResourceDimension = (D3D10_RESOURCE_DIMENSION)reader.ReadUInt32(),
+            DxgiFormat = (DxgiFormat)reader.ReadUInt32(),
+            ResourceDimension = (D3D10ResourceDimension)reader.ReadUInt32(),
             MiscFlag = reader.ReadUInt32(),
             ArraySize = reader.ReadUInt32(),
-            MiscFlags2 = (DDS_ALPHA_MODE)reader.ReadUInt32()
+            MiscFlags2 = (AlphaMode)reader.ReadUInt32()
         };
 
     private static DdsPixelFormat ReadPixelFormat(BinaryReader reader) =>
@@ -175,7 +175,7 @@ public sealed record DdsHeader
             Size = reader.ReadUInt32(),
             Flags = (DDSPixelFormatFlags)reader.ReadUInt32(),
             FourCC = reader.ReadChars(4),
-            RGBBitCount = reader.ReadUInt32(),
+            RGBBitCount = reader.ReadInt32(),
             RBitMask = reader.ReadUInt32(),
             GBitMask = reader.ReadUInt32(),
             BBitMask = reader.ReadUInt32(),
