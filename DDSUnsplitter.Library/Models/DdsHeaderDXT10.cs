@@ -1,5 +1,28 @@
 ﻿namespace DDSUnsplitter.Library.Models;
 
+public sealed record DdsHeaderDXT10
+{
+    public DxgiFormat DxgiFormat { get; init; }
+    public D3D10ResourceDimension ResourceDimension { get; init; }
+    public uint MiscFlag { get; init; }
+    public uint ArraySize { get; init; }
+    public AlphaMode MiscFlags2 { get; init; }
+
+    public byte[]? Serialize()
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+
+        writer.Write((uint)DxgiFormat);
+        writer.Write((uint)ResourceDimension);
+        writer.Write((uint)MiscFlag);
+        writer.Write(ArraySize);
+        writer.Write((uint)MiscFlags2);
+
+        return stream.ToArray();
+    }
+}
+
 public enum D3D10ResourceDimension : uint
 {
     UNKNOWN = 0,
@@ -17,15 +40,6 @@ public enum AlphaMode : uint
     PREMULTIPLIED = 0x2,
     MODE_OPAQUE = 0x3,
     MODE_CUSTOM = 0x4
-}
-
-public sealed record DdsHeaderDXT10
-{
-    public DxgiFormat DxgiFormat { get; init; }
-    public D3D10ResourceDimension ResourceDimension { get; init; }
-    public uint MiscFlag { get; init; }
-    public uint ArraySize { get; init; }
-    public AlphaMode MiscFlags2 { get; init; }
 }
 
 /// <summary>DXGI (DirectX Graphics Infrastructure) pixel format enumeration</summary>

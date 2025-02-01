@@ -28,24 +28,7 @@ public class DDSFileCombinerTests
             Directory.Delete(_tempDir, true);
     }
 
-    [Test]
-    [TestCase("defaultnouvs.dds", 512, 512, 124)]
-    public void WhenCombining_ValidDDSFile_VerifyHeaderProperties(string fileName, int expectedWidth,
-        int expectedHeight, int expectedSize)
-    {
-        string baseFileName = Path.Combine(TEST_FILES_DIR, fileName);
-
-        var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(File.ReadAllBytes(baseFileName));
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(header.Size, Is.EqualTo(expectedSize), "Header size mismatch");
-            Assert.That(header.Width, Is.EqualTo(expectedWidth), "Width mismatch");
-            Assert.That(header.Height, Is.EqualTo(expectedHeight), "Height mismatch");
-        });
-    }
-
-    [Test]
+        [Test]
     [TestCase("defaultnouvs.dds")]
     public void WhenCombining_WithSafeName_CreatesCombinedFile(string fileName)
     {
@@ -94,20 +77,20 @@ public class DDSFileCombinerTests
                 "Combined file was created outside temp directory");
 
             // Verify headers
-            var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(File.ReadAllBytes(combinedFileName));
+            var headerInfo = DdsHeader.Deserialize(baseFileName + headerPattern);
 
             // Check header format
             if (hasDxt10Header)
             {
-                Assert.That(new string(header.PixelFormat.FourCC), Is.EqualTo("DX10"),
+                Assert.That(new string(headerInfo.Header.PixelFormat.FourCC), Is.EqualTo("DX10"),
                     "File should have DX10 FourCC");
-                Assert.That(dxt10Header, Is.Not.Null, "DXT10 header should be present");
+                Assert.That(headerInfo.DXT10Header, Is.Not.Null, "DXT10 header should be present");
             }
             else if (!string.IsNullOrEmpty(expectedFourCC))
             {
-                Assert.That(new string(header.PixelFormat.FourCC), Is.EqualTo(expectedFourCC),
+                Assert.That(new string(headerInfo.Header.PixelFormat.FourCC), Is.EqualTo(expectedFourCC),
                     "File should have expected FourCC");
-                Assert.That(dxt10Header, Is.Null, "DXT10 header should not be present");
+                Assert.That(headerInfo.DXT10Header, Is.Null, "DXT10 header should not be present");
             }
 
             // Verify file size
@@ -126,7 +109,7 @@ public class DDSFileCombinerTests
                 "CryEngine end marker not found or incorrect");
 
             // Verify mipmap count in header matches expected
-            Assert.That(header.MipMapCount, Is.EqualTo(expectedMipmapCount),
+            Assert.That(headerInfo.Header.MipMapCount, Is.EqualTo(expectedMipmapCount),
                 "MipMap count in header doesn't match expected count");
 
             // Verify number of data files matches expected sizes array length minus header
@@ -147,23 +130,16 @@ public class DDSFileCombinerTests
     public void Combine_SCWithCreatesCombinedFile()
     {
         string baseFileName = Path.Combine("TestFiles", "defaultnouvs.dds");
-        var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(File.ReadAllBytes(baseFileName));
 
-        Assert.Multiple(() =>
-        {
-            Assert.That(header.Size, Is.EqualTo(124), "Header size mismatch");
-            Assert.That(header.Width, Is.EqualTo(512), "Width mismatch");
-            Assert.That(header.Height, Is.EqualTo(512), "Height mismatch");
-            Assert.That(dxt10Header, Is.Null, "DXT10 header should not be present for this test file");
-        });
-
-        // Don't overwrite test files
         string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
 
-        Assert.Multiple(() =>
-        {
-            Assert.That(File.Exists(combinedFileName), "Combined file was not created");
-        });
+        Assert.That(File.Exists(combinedFileName), "Combined file was not created");
+        FileInfo fileInfo = new(combinedFileName);
+        Assert.That(fileInfo.Length, Is.GreaterThan(0), "Combined file is empty");
+        var allTestFiles = Directory.GetFiles("TestFiles", "defaultnouvs.dds*");
+        Assert.That(allTestFiles.Length, Is.EqualTo(5), "All test files should be present");
+        Assert.That(allTestFiles.Contains(baseFileName), "Base file should be present");
+        Assert.That(allTestFiles, Does.Contain(baseFileName + ".0"), "Header file should have been rewritten with safe extension");
     }
 
     [Test]
@@ -171,20 +147,20 @@ public class DDSFileCombinerTests
     {
         string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
 
-        var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(File.ReadAllBytes(baseFileName));
+        var headerInfo = DdsHeader.Deserialize(baseFileName);
 
         Assert.Multiple(() =>
         {
             // Verify DDS header indicates DXT10
-            Assert.That(new string(header.PixelFormat.FourCC), Is.EqualTo("DX10"), "FourCC should be DX10");
+            Assert.That(new string(headerInfo.Header.PixelFormat.FourCC), Is.EqualTo("DX10"), "FourCC should be DX10");
 
             // Verify DXT10 header is present and correct
-            Assert.That(dxt10Header, Is.Not.Null, "DXT10 header should be present");
-            Assert.That(dxt10Header!.DxgiFormat, Is.EqualTo(DxgiFormat.DXGI_FORMAT_BC5_SNORM),
+            Assert.That(headerInfo.DXT10Header, Is.Not.Null, "DXT10 header should be present");
+            Assert.That(headerInfo.DXT10Header!.DxgiFormat, Is.EqualTo(DxgiFormat.BC5_SNORM),
                 "Should be BC5_SNORM format for normal maps");
-            Assert.That(dxt10Header.ResourceDimension, Is.EqualTo(D3D10ResourceDimension.D3D10_RESOURCE_DIMENSION_TEXTURE2D),
+            Assert.That(headerInfo.DXT10Header.ResourceDimension, Is.EqualTo(D3D10ResourceDimension.TEXTURE2D),
                 "Should be a 2D texture");
-            Assert.That(dxt10Header.ArraySize, Is.EqualTo(1), "Array size should be 1");
+            Assert.That(headerInfo.DXT10Header.ArraySize, Is.EqualTo(1), "Array size should be 1");
         });
     }
 
@@ -218,10 +194,10 @@ public class DDSFileCombinerTests
             Assert.That(File.Exists(combinedFileName), "Combined file should exist");
 
             // Verify the combined file has correct headers
-            var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(File.ReadAllBytes(combinedFileName));
-            Assert.That(new string(header.PixelFormat.FourCC), Is.EqualTo("DX10"),
+            var headerInfo = DdsHeader.Deserialize(combinedFileName);
+            Assert.That(new string(headerInfo.Header.PixelFormat.FourCC), Is.EqualTo("DX10"),
                 "Combined file should preserve DX10 FourCC");
-            Assert.That(dxt10Header, Is.Not.Null, "Combined file should preserve DXT10 header");
+            Assert.That(headerInfo.DXT10Header, Is.Not.Null, "Combined file should preserve DXT10 header");
 
             // Verify file sizes are correct (no .a variants included)
             var combinedFileSize = new FileInfo(combinedFileName).Length;

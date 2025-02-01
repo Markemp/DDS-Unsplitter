@@ -25,7 +25,6 @@ public class DDSFileCombiner
 
         var headerFile = matchingFiles[0];
         var headerFileInfo = new FileInfo(headerFile);
-        var headerFileLength = headerFileInfo.Length;
 
         var headerInfo = DdsHeader.Deserialize(headerFile);
 
@@ -73,7 +72,7 @@ public class DDSFileCombiner
             return true;
 
         // Check if file is long enough to contain all separate mipmaps
-        return file.Length >= offsets[^1];
+        return file.Length > offsets[^1];
     }
 
     public static List<long> CalculateMipmapOffsets(HeaderInfo headerInfo)
@@ -85,10 +84,10 @@ public class DDSFileCombiner
 
         // Calculate how many mips are in separate files by finding the highest numbered extension
         // This assumes the files are numbered sequentially from 1 to N
-        int separateMipCount = 3; // From your example, but should be determined by checking files
+        int smallMipsInHeader = 3; // From your example, but should be determined by checking files
 
         // The number of small mips stored in PostHeaderData
-        int smallMipsInHeader = totalMipCount - separateMipCount;
+        int separateMipCount = totalMipCount - smallMipsInHeader;
 
         List<long> offsets = [];
         long currentOffset = GetInitialOffset(headerInfo);
@@ -159,7 +158,8 @@ public class DDSFileCombiner
         // Handle legacy DDS formats (DXT1, DXT3, DXT5, etc.)
         if ((pixelFormat.Flags & pixelFormat.Flags) != 0)
         {
-            switch (pixelFormat.FourCC.ToString())
+            var fourCC = new string(pixelFormat.FourCC);
+            switch (fourCC)
             {
                 case "DXT1":
                     return ((width + 3) / 4) * ((height + 3) / 4) * 8;
@@ -197,16 +197,18 @@ public class DDSFileCombiner
             matchingFiles[0] = newHeaderPath;
         }
 
-        //var (header, dxt10Header) = DdsHeaderDeserializer.Deserialize(headerContent);
-        int totalHeaderSize = DDS_HEADER_SIZE + (dxt10Header != null ? DXT10_HEADER_SIZE : 0);
+        int totalHeaderSize = DDS_HEADER_SIZE + (headerInfo.DXT10Header != null ? DXT10_HEADER_SIZE : 0);
 
         using var outputStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
-        outputStream.Write(headerContent, 0, totalHeaderSize);
 
-        var isCubeMap = (header.Caps2 & DDSCaps2.CUBEMAP) != 0;
+        outputStream.Write(headerInfo.Header.Serialize(), 0, DDS_HEADER_SIZE);
+        if (headerInfo.DXT10Header is not null)
+            outputStream.Write(headerInfo.DXT10Header.Serialize(), DDS_HEADER_SIZE, DXT10_HEADER_SIZE);
+
+        var isCubeMap = (headerInfo.Header.Caps2 & DDSCaps2.CUBEMAP) != 0;
         var faces = isCubeMap ? 6 : 1;
 
-        var mipMapSizes = GetMipMapSizes(header);
+        var mipMapSizes = GetMipMapSizes(headerInfo.Header);
         var mipMapBytes = matchingFiles
             .Skip(1) // Skip the header file
             .OrderDescending()
@@ -217,10 +219,10 @@ public class DDSFileCombiner
         // For cubemaps, we need to organize the data by face first
         for (var cubeFace = 0; cubeFace < faces; cubeFace++)
         {
-            for (var mipMap = 0; mipMap < header.MipMapCount; mipMap++)
+            for (var mipMap = 0; mipMap < headerInfo.Header.MipMapCount; mipMap++)
             {
                 var mipMapSize = mipMapSizes[mipMap];
-                var mipMapByteCount = GetMipmapSize(mipMapSize.Width, mipMapSize.Height, header.PixelFormat);
+                var mipMapByteCount = GetMipmapSize(mipMapSize.Width, mipMapSize.Height, headerInfo.Header.PixelFormat);
 
                 if (mipMap < mipMapBytes.Length)
                 {
@@ -236,9 +238,9 @@ public class DDSFileCombiner
                 {
                     // For the small mipmaps in the main file
                     var faceOffset = isCubeMap ? (cubeFace * mipMapByteCount) : 0;
-                    if (postHeaderDataOffset + mipMapByteCount <= postHeaderData.Length)
+                    if (postHeaderDataOffset + mipMapByteCount <= headerInfo.PostHeaderData.Length)
                     {
-                        outputStream.Write(postHeaderData, postHeaderDataOffset, mipMapByteCount);
+                        outputStream.Write(headerInfo.PostHeaderData, postHeaderDataOffset, mipMapByteCount);
                         postHeaderDataOffset += mipMapByteCount;
                     }
                     else
@@ -274,10 +276,10 @@ public class DDSFileCombiner
 
     private static int GetInitialOffset(HeaderInfo headerInfo)
     {
-        int offset = sizeof(DdsHeader); // 128 bytes
+        int offset = DDS_HEADER_SIZE;
 
         if (headerInfo.DXT10Header is not null)
-            offset += sizeof(DdsHeaderDXT10); // Add DXT10 header size
+            offset += DXT10_HEADER_SIZE;
 
         if (headerInfo.PostHeaderData != null)
             offset += headerInfo.PostHeaderData.Length;
@@ -300,11 +302,4 @@ public class DDSFileCombiner
     //        var padding = new byte[4 - remainder];
     //        outputStream.Write(padding, 0, padding.Length);
     //    }
-
-    //public class HeaderInfo
-    //{
-    //    public DdsHeader Header { get; set; }
-    //    public DdsHeaderDXT10? DXT10Header { get; set; }
-    //    public byte[] PostHeaderData { get; set; }
-    //}
 }

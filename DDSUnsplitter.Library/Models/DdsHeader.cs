@@ -31,6 +31,7 @@ public sealed record DdsHeader
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
 
+        writer.Write(DDS_MAGIC);
         writer.Write(Size);
         writer.Write(Flags);
         writer.Write(Height);
@@ -45,23 +46,6 @@ public sealed record DdsHeader
         writer.Write((int)Caps3);
         writer.Write((int)Caps4);
         writer.Write(Reserved2);
-
-        return stream.ToArray();
-    }
-
-    public byte[]? SerializeDXT10Header(HeaderInfo headerInfo)
-    {
-        if (headerInfo.DXT10Header is null)
-            return null;
-
-        using var stream = new MemoryStream();
-        using var writer = new BinaryWriter(stream);
-
-        writer.Write((uint)headerInfo.DXT10Header.DxgiFormat);
-        writer.Write((uint)headerInfo.DXT10Header.ResourceDimension);
-        writer.Write((uint)headerInfo.DXT10Header.MiscFlag);
-        writer.Write(headerInfo.DXT10Header.ArraySize);
-        writer.Write((uint)headerInfo.DXT10Header.MiscFlags2);
 
         return stream.ToArray();
     }
