@@ -136,8 +136,8 @@ public class DDSFileCombinerTests
         Assert.That(File.Exists(combinedFileName), "Combined file was not created");
         FileInfo fileInfo = new(combinedFileName);
         Assert.That(fileInfo.Length, Is.GreaterThan(0), "Combined file is empty");
+        Assert.That(fileInfo.Length, Is.EqualTo(174896), "Combined file size is incorrect");
         var allTestFiles = Directory.GetFiles("TestFiles", "defaultnouvs.dds*");
-        Assert.That(allTestFiles.Length, Is.EqualTo(5), "All test files should be present");
         Assert.That(allTestFiles.Contains(baseFileName), "Base file should be present");
         Assert.That(allTestFiles, Does.Contain(baseFileName + ".0"), "Header file should have been rewritten with safe extension");
     }

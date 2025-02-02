@@ -193,7 +193,8 @@ public class DDSFileCombiner
         if (Path.GetExtension(matchingFiles[0]) == $".{DDS_EXTENSION}")
         {
             var newHeaderPath = Path.ChangeExtension(matchingFiles[0], $".{DDS_EXTENSION}.0");
-            File.Move(matchingFiles[0], newHeaderPath);
+            if (!File.Exists(newHeaderPath))
+                File.Move(matchingFiles[0], newHeaderPath);
             matchingFiles[0] = newHeaderPath;
         }
 
@@ -201,7 +202,8 @@ public class DDSFileCombiner
 
         using var outputStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
 
-        outputStream.Write(headerInfo.Header.Serialize(), 0, DDS_HEADER_SIZE);
+        var serializedHeader = headerInfo.Header.Serialize();
+        outputStream.Write(serializedHeader, 0, DDS_HEADER_SIZE);
         if (headerInfo.DXT10Header is not null)
             outputStream.Write(headerInfo.DXT10Header.Serialize(), DDS_HEADER_SIZE, DXT10_HEADER_SIZE);
 

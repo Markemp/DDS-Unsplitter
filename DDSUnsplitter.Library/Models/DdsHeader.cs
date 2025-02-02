@@ -31,7 +31,7 @@ public sealed record DdsHeader
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
 
-        writer.Write(DDS_MAGIC);
+        writer.Write(DDS_MAGIC.ToCharArray());
         writer.Write(Size);
         writer.Write(Flags);
         writer.Write(Height);
