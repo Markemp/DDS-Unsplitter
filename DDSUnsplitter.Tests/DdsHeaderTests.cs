@@ -43,4 +43,26 @@ public class DdsHeaderTests
             Assert.That(headerInfo.DXT10Header, Is.Null, "DXT10 header should not be present for this test file");
         });
     }
+
+    [Test]
+    public void WhenParsing_DXT10NormalMap_HeaderIsCorrect()
+    {
+        string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
+
+        var headerInfo = DdsHeader.Deserialize(baseFileName);
+
+        Assert.Multiple(() =>
+        {
+            // Verify DDS header indicates DXT10
+            Assert.That(new string(headerInfo.Header.PixelFormat.FourCC), Is.EqualTo("DX10"), "FourCC should be DX10");
+
+            // Verify DXT10 header is present and correct
+            Assert.That(headerInfo.DXT10Header, Is.Not.Null, "DXT10 header should be present");
+            Assert.That(headerInfo.DXT10Header!.DxgiFormat, Is.EqualTo(DxgiFormat.BC5_SNORM),
+                "Should be BC5_SNORM format for normal maps");
+            Assert.That(headerInfo.DXT10Header.ResourceDimension, Is.EqualTo(D3D10ResourceDimension.TEXTURE2D),
+                "Should be a 2D texture");
+            Assert.That(headerInfo.DXT10Header.ArraySize, Is.EqualTo(1), "Array size should be 1");
+        });
+    }
 }

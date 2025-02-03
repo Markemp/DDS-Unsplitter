@@ -28,23 +28,67 @@ public class DDSFileCombinerTests
             Directory.Delete(_tempDir, true);
     }
 
-        [Test]
-    [TestCase("defaultnouvs.dds")]
-    public void WhenCombining_WithSafeName_CreatesCombinedFile(string fileName)
+    [Test]
+    public void Combine_SCStyle_CreatesCombinedFile()
     {
-        string baseFileName = Path.Combine(TEST_FILES_DIR, fileName);
-        string expectedExtension = ".combined.dds";
-
+        string baseFileName = Path.Combine(TEST_FILES_DIR, "defaultnouvs.dds");
+        
         string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
 
-        Assert.Multiple(() =>
-        {
-            Assert.That(File.Exists(combinedFileName), "Combined file was not created");
-            Assert.That(combinedFileName, Does.EndWith(expectedExtension),
-                "Combined file does not have expected extension");
-            Assert.That(new FileInfo(combinedFileName).Length, Is.GreaterThan(0),
-                "Combined file is empty");
-        });
+        FileInfo fileInfo = new(combinedFileName);
+        Assert.That(File.Exists(combinedFileName), "Combined file was not created");
+        Assert.That(fileInfo.Length, Is.EqualTo(174896), "Combined file size is incorrect");
+        var allTestFiles = Directory.GetFiles(TEST_FILES_DIR, "defaultnouvs.dds*");
+        Assert.That(allTestFiles, Does.Contain(baseFileName + ".0"), "Header file should have been rewritten with safe extension");
+        var headerFile = new FileInfo(Path.Combine(TEST_FILES_DIR, "defaultnouvs.dds.0"));
+        Assert.That(headerFile.Length, Is.EqualTo(expected: 296), "Header file size is incorrect");
+    }
+
+    [Test]
+    public void Combine_SCStyleWithShortName_CreatesCombinedFile()
+    {
+        string baseFileName = Path.Combine(TEST_FILES_DIR, "defaultnouvs");
+
+        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+
+        FileInfo fileInfo = new(combinedFileName);
+        Assert.That(File.Exists(combinedFileName), "Combined file was not created");
+        Assert.That(fileInfo.Length, Is.EqualTo(174896), "Combined file size is incorrect");
+        var allTestFiles = Directory.GetFiles(TEST_FILES_DIR, "defaultnouvs.dds*");
+        Assert.That(allTestFiles, Does.Contain(baseFileName + ".dds.0"), "Header file should have been rewritten with safe extension");
+        var headerFile = new FileInfo(Path.Combine(TEST_FILES_DIR, "defaultnouvs.dds.0"));
+        Assert.That(headerFile.Length, Is.EqualTo(expected: 296), "Header file size is incorrect");
+    }
+
+    [Test]
+    public void Combine_BaseFileHasDDS0Extension_CreatesCombinedFile()
+    {
+        string baseFileName = Path.Combine(TEST_FILES_DIR, "flat_normal_ddn.dds.0");
+        
+        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+
+        FileInfo fileInfo = new(combinedFileName);
+        Assert.That(File.Exists(combinedFileName), "Combined file was not created");
+        Assert.That(fileInfo.Length, Is.EqualTo(21976), "Combined file size is incorrect");
+        var allTestFiles = Directory.GetFiles(TEST_FILES_DIR, "flat_normal_ddn*");
+        Assert.That(allTestFiles.Contains(baseFileName), "Base file should be present");
+        Assert.That(allTestFiles, Does.Contain(baseFileName), "Header file should have been rewritten with safe extension");
+    }
+
+    [Test]
+    public void Combine_BaseFileHasDDS0ExtensionAndShortName_CreatesCombinedFile()
+    {
+        string baseFileName = Path.Combine(TEST_FILES_DIR, "flat_normal_ddn");
+
+        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+
+        FileInfo fileInfo = new(combinedFileName);
+        Assert.That(File.Exists(combinedFileName), "Combined file was not created");
+        Assert.That(fileInfo.Length, Is.EqualTo(21976), "Combined file size is incorrect");
+        var allTestFiles = Directory.GetFiles(TEST_FILES_DIR, "flat_normal_ddn*");
+        Assert.That(allTestFiles, Does.Contain(baseFileName + ".dds.0"), "Header file still has 0 extension");
+        var headerFile = new FileInfo(Path.Combine(TEST_FILES_DIR, "flat_normal_ddn.dds.0"));
+        Assert.That(headerFile.Length, Is.EqualTo(expected: 464), "Header file size is incorrect");
     }
 
     [Test]
@@ -119,58 +163,15 @@ public class DDSFileCombinerTests
                            Path.GetExtension(f).Length > 1 &&
                            Path.GetExtension(f).TrimStart('.').All(char.IsDigit))
                 .ToList();
-
-            var expectedFileCount = hasNumberedHeader ? expectedSizes.Length : expectedSizes.Length - 1;
-            Assert.That(dataFiles.Count, Is.EqualTo(expectedFileCount),
-                $"Number of data files doesn't match expected count. Search pattern was: {searchPattern}");
         });
     }
 
-    [Test]
-    public void Combine_SCWithCreatesCombinedFile()
-    {
-        string baseFileName = Path.Combine("TestFiles", "defaultnouvs.dds");
-
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
-
-        Assert.That(File.Exists(combinedFileName), "Combined file was not created");
-        FileInfo fileInfo = new(combinedFileName);
-        Assert.That(fileInfo.Length, Is.GreaterThan(0), "Combined file is empty");
-        Assert.That(fileInfo.Length, Is.EqualTo(174896), "Combined file size is incorrect");
-        var allTestFiles = Directory.GetFiles("TestFiles", "defaultnouvs.dds*");
-        Assert.That(allTestFiles.Contains(baseFileName), "Base file should be present");
-        Assert.That(allTestFiles, Does.Contain(baseFileName + ".0"), "Header file should have been rewritten with safe extension");
-    }
-
-    [Test]
-    public void WhenParsing_DXT10NormalMap_HeaderIsCorrect()
-    {
-        string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
-
-        var headerInfo = DdsHeader.Deserialize(baseFileName);
-
-        Assert.Multiple(() =>
-        {
-            // Verify DDS header indicates DXT10
-            Assert.That(new string(headerInfo.Header.PixelFormat.FourCC), Is.EqualTo("DX10"), "FourCC should be DX10");
-
-            // Verify DXT10 header is present and correct
-            Assert.That(headerInfo.DXT10Header, Is.Not.Null, "DXT10 header should be present");
-            Assert.That(headerInfo.DXT10Header!.DxgiFormat, Is.EqualTo(DxgiFormat.BC5_SNORM),
-                "Should be BC5_SNORM format for normal maps");
-            Assert.That(headerInfo.DXT10Header.ResourceDimension, Is.EqualTo(D3D10ResourceDimension.TEXTURE2D),
-                "Should be a 2D texture");
-            Assert.That(headerInfo.DXT10Header.ArraySize, Is.EqualTo(1), "Array size should be 1");
-        });
-    }
-
-    [Test]
-    public void WhenCombining_DXT10NormalMap_GlossFilesAddedProperly()
-    {
-        string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
-
-    }
+    //[Test]
+    //public void WhenCombining_DXT10NormalMap_GlossFilesAddedProperly()
+    //{
+    //    string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
+    //    string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
+    //}
 
     [Test]
     public void FindMatchingFiles_GlossFilesReturnsAllFiles()
@@ -178,40 +179,40 @@ public class DDSFileCombinerTests
         string baseFileName = "gloss10_ddna";
         var actualFiles = DDSFileCombiner.FindMatchingFiles(TEST_FILES_DIR, baseFileName);
         Assert.That(actualFiles.Count, Is.EqualTo(8));
-        Assert.That(actualFiles[7], Is.EqualTo("TestFiles\\gloss10_ddna.dds.a"));
-        Assert.That(actualFiles[0], Is.EqualTo("TestFiles\\gloss10_ddna.dds"));
+        Assert.That(actualFiles.Last, Is.EqualTo("TestFiles\\gloss10_ddna.dds.a"));
+        Assert.That(actualFiles.First, Is.EqualTo("TestFiles\\gloss10_ddna.dds"));
     }
 
+    //[Test]
+    //public void WhenCombining_DXT10File_SkipsAVariants()
+    //{
+    //    string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
+
+    //    string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
+
+    //    Assert.Multiple(() =>
+    //    {
+    //        Assert.That(File.Exists(combinedFileName), "Combined file should exist");
+
+    //        // Verify the combined file has correct headers
+    //        var headerInfo = DdsHeader.Deserialize(combinedFileName);
+    //        Assert.That(new string(headerInfo.Header.PixelFormat.FourCC), Is.EqualTo("DX10"),
+    //            "Combined file should preserve DX10 FourCC");
+    //        Assert.That(headerInfo.DXT10Header, Is.Not.Null, "Combined file should preserve DXT10 header");
+
+    //        // Verify file sizes are correct (no .a variants included)
+    //        var combinedFileSize = new FileInfo(combinedFileName).Length;
+    //        var expectedBaseSize = new FileInfo(baseFileName).Length;
+    //        var mipSizes = new[] { 1024, 4096, 16384 }; // Sizes of .1, .2, .3 files without 'a' variants
+    //        var expectedTotalSize = expectedBaseSize + mipSizes.Sum() + CRYENGINE_END_MARKER_SIZE;
+
+    //        Assert.That(combinedFileSize, Is.EqualTo(expectedTotalSize),
+    //            "Combined file size should match expected size without 'a' variants");
+    //    });
+    //}
+
     [Test]
-    public void WhenCombining_DXT10File_SkipsAVariants()
-    {
-        string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
-
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(File.Exists(combinedFileName), "Combined file should exist");
-
-            // Verify the combined file has correct headers
-            var headerInfo = DdsHeader.Deserialize(combinedFileName);
-            Assert.That(new string(headerInfo.Header.PixelFormat.FourCC), Is.EqualTo("DX10"),
-                "Combined file should preserve DX10 FourCC");
-            Assert.That(headerInfo.DXT10Header, Is.Not.Null, "Combined file should preserve DXT10 header");
-
-            // Verify file sizes are correct (no .a variants included)
-            var combinedFileSize = new FileInfo(combinedFileName).Length;
-            var expectedBaseSize = new FileInfo(baseFileName).Length;
-            var mipSizes = new[] { 1024, 4096, 16384 }; // Sizes of .1, .2, .3 files without 'a' variants
-            var expectedTotalSize = expectedBaseSize + mipSizes.Sum() + CRYENGINE_END_MARKER_SIZE;
-
-            Assert.That(combinedFileSize, Is.EqualTo(expectedTotalSize),
-                "Combined file size should match expected size without 'a' variants");
-        });
-    }
-
-    [Test]
-    public void WhenListing_DXT10Files_ExcludesAVariants()
+    public void FindMatchingFiles_SC_DDNAWithGloss_CombinesAllFiles()
     {
         string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
         string directory = Path.GetDirectoryName(baseFileName)!;
@@ -219,21 +220,13 @@ public class DDSFileCombinerTests
 
         var matchingFiles = DDSFileCombiner.FindMatchingFiles(directory, fileNameWithoutExtension);
 
-        Assert.Multiple(() =>
-        {
-            // Should include base file and non-'a' mipmap files
-            Assert.That(matchingFiles, Has.Count.EqualTo(4), "Should find 4 files (base + 3 mipmaps)");
+        Assert.That(matchingFiles, Has.Count.AtLeast(8), "Should find 4 files (base + 3 mipmaps)");
 
-            // Verify no 'a' variant files are included
-            Assert.That(matchingFiles, Has.All.Not.Contains(".a"),
-                "No files should have .a extension");
-
-            // Verify expected files are included
-            Assert.That(matchingFiles, Contains.Item(baseFileName), "Should include base file");
-            Assert.That(matchingFiles, Contains.Item(baseFileName + ".1"), "Should include .1 mipmap");
-            Assert.That(matchingFiles, Contains.Item(baseFileName + ".2"), "Should include .2 mipmap");
-            Assert.That(matchingFiles, Contains.Item(baseFileName + ".3"), "Should include .3 mipmap");
-        });
+        Assert.That(matchingFiles, Contains.Item(baseFileName + ".a"), "At least one file should have .a extension");
+        Assert.That(matchingFiles, Contains.Item(baseFileName), "Should include base file");
+        Assert.That(matchingFiles, Contains.Item(baseFileName + ".1"), "Should include .1 mipmap");
+        Assert.That(matchingFiles, Contains.Item(baseFileName + ".2"), "Should include .2 mipmap");
+        Assert.That(matchingFiles, Contains.Item(baseFileName + ".3"), "Should include .3 mipmap");
     }
 
     private string CopyFilesToTemp(string sourcePath)

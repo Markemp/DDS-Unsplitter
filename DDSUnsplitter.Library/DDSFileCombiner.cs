@@ -3,9 +3,7 @@ using static DDSUnsplitter.Library.Models.DdsConstants;
 
 namespace DDSUnsplitter.Library;
 
-/// <summary>
-/// Combines split DDS files back into a single file, handling CryEngine-specific formatting
-/// </summary>
+/// <summary>Combines split DDS files back into a single file, handling CryEngine-specific formatting</summary>
 public class DDSFileCombiner
 {
     /// <summary>
@@ -166,6 +164,7 @@ public class DDSFileCombiner
 
                 case "DXT3":
                 case "DXT5":
+                case "ATI2":
                     return ((width + 3) / 4) * ((height + 3) / 4) * 16;
 
                 default:
