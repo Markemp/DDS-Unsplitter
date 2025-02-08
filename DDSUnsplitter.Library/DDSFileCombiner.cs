@@ -1,7 +1,16 @@
-﻿using DDSUnsplitter.Library.Models;
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿using DDSUnsplitter.Library.Models;
 using static DDSUnsplitter.Library.Models.DdsConstants;
 
 namespace DDSUnsplitter.Library;
+
+public class DdsFileSet
+{
+    public string HeaderFile { get; set; } = string.Empty;
+    public List<string> MipmapFiles { get; set; } = new();
+    public string? GlossHeaderFile { get; set; }
+    public List<string>? GlossMipmapFiles { get; set; }
+    public bool IsAlreadyCombined { get; set; }
+}
 
 /// <summary>Combines split DDS files back into a single file, handling CryEngine-specific formatting</summary>
 public class DDSFileCombiner
@@ -15,25 +24,30 @@ public class DDSFileCombiner
     /// <returns>Path to the combined file</returns>
     public static string Combine(string baseFileName, bool useSafeName = false, string combinedFileNameIdentifier = "combined")
     {
-        if (baseFileName is null)
-            throw new ArgumentNullException(nameof(baseFileName));
+        ArgumentNullException.ThrowIfNull(baseFileName);
 
         var (directory, fileNameWithoutExtension) = PrepareFileInfo(baseFileName);
-        var matchingFiles = FindMatchingFiles(directory, fileNameWithoutExtension);
+        var fileSet = FindMatchingFiles(directory, fileNameWithoutExtension);
 
-        var headerFile = matchingFiles[0];
-        var headerFileInfo = new FileInfo(headerFile);
-
-        var headerInfo = DdsHeader.Deserialize(headerFile);
-
-        if (IsAlreadyValidDDSFile(headerInfo, headerFileInfo))
+        if (fileSet.IsAlreadyCombined)
         {
-            Console.WriteLine($"File {headerFile} is already a valid DDS file. Skipping combining.");
-            return headerFile;
+            Console.WriteLine($"File {fileSet.HeaderFile} is already a valid DDS file. Skipping combining.");
+            return fileSet.HeaderFile;
         }
 
+        var headerInfo = DdsHeader.Deserialize(fileSet.HeaderFile);
         var outputPath = CreateOutputPath(directory, fileNameWithoutExtension, useSafeName, combinedFileNameIdentifier);
-        CombineFiles(outputPath, headerInfo, matchingFiles);
+        
+        // Combine main texture files
+        CombineFiles(outputPath, headerInfo, fileSet.HeaderFile, fileSet.MipmapFiles);
+
+        // If there's a gloss texture, combine those files too
+        if (fileSet.GlossHeaderFile != null && fileSet.GlossMipmapFiles != null)
+        {
+            var glossOutputPath = Path.ChangeExtension(outputPath, $".{DDS_EXTENSION}.a");
+            var glossHeaderInfo = DdsHeader.Deserialize(fileSet.GlossHeaderFile);
+            CombineFiles(glossOutputPath, glossHeaderInfo, fileSet.GlossHeaderFile, fileSet.GlossMipmapFiles);
+        }
 
         return outputPath;
     }
@@ -49,14 +63,51 @@ public class DDSFileCombiner
         return (directory, fileNameWithoutExtension);
     }
 
-    public static List<string> FindMatchingFiles(string directory, string fileNameWithoutExtension)
+    public static DdsFileSet FindMatchingFiles(string directory, string fileNameWithoutExtension)
     {
-        var matchingFiles = Directory.GetFiles(directory, $"{fileNameWithoutExtension}*").ToList();
+        var result = new DdsFileSet();
+        var allFiles = Directory.GetFiles(directory, $"{fileNameWithoutExtension}*")
+            .Where(f => !f.Contains(".combined.", StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
-        // Remove any previously combined files
-        matchingFiles.RemoveAll(file => file.Contains(".combined.", StringComparison.OrdinalIgnoreCase));
+        // Check if base .dds file exists and is valid
+        var baseFile = allFiles.FirstOrDefault(f => f.EndsWith($".{DDS_EXTENSION}"));
+        if (baseFile != null)
+        {
+            var headerInfo = DdsHeader.Deserialize(baseFile);
+            if (IsAlreadyValidDDSFile(headerInfo, new FileInfo(baseFile)))
+            {
+                return new DdsFileSet { HeaderFile = baseFile, IsAlreadyCombined = true };
+            }
+        }
 
-        return matchingFiles;
+        // Find main texture header and mipmaps
+        var dds0File = allFiles.FirstOrDefault(f => f.EndsWith($".{DDS_EXTENSION}.0"));
+        result.HeaderFile = dds0File ?? baseFile ?? throw new FileNotFoundException("No header file found");
+
+        // Get main texture mipmaps (files ending in .dds.1, .dds.2, etc.)
+        result.MipmapFiles = allFiles
+            .Where(f => System.Text.RegularExpressions.Regex.IsMatch(f, @"\.dds\.\d+$"))
+            .Where(f => !f.EndsWith(".0"))
+            .OrderBy(f => int.Parse(f.Split('.').Last()))
+            .ToList();
+
+        // Find gloss texture header and mipmaps
+        var glossHeader = allFiles.FirstOrDefault(f => f.EndsWith($".{DDS_EXTENSION}.a"));
+        if (glossHeader != null)
+        {
+            result.GlossHeaderFile = glossHeader;
+            // Get gloss mipmaps (files ending in .dds.1a, .dds.2a, etc.)
+            result.GlossMipmapFiles = allFiles
+                .Where(f => System.Text.RegularExpressions.Regex.IsMatch(f, @"\.dds\.\d+a$"))
+                .OrderBy(f => {
+                    var match = System.Text.RegularExpressions.Regex.Match(f, @"\.dds\.(\d+)a$");
+                    return int.Parse(match.Groups[1].Value);
+                })
+                .ToList();
+        }
+
+        return result;
     }
 
     private static bool IsAlreadyValidDDSFile(HeaderInfo headerInfo, FileInfo file)
@@ -136,6 +187,7 @@ public class DDSFileCombiner
             case DxgiFormat.BC3_UNORM:
             case DxgiFormat.BC3_UNORM_SRGB:
             case DxgiFormat.BC6H_UF16:
+            case DxgiFormat.BC5_SNORM:
                 blockSize = 16;
                 blockWidth = blockHeight = 4;
                 break;
@@ -166,6 +218,7 @@ public class DDSFileCombiner
                 case "DXT3":
                 case "DXT5":
                 case "ATI2":
+                case "BC5_SNORM":
                     return ((width + 3) / 4) * ((height + 3) / 4) * 16;
 
                 default:
@@ -185,36 +238,69 @@ public class DDSFileCombiner
         return Path.Combine(directory, $"{fileNameWithoutExtension}{suffix}.{DDS_EXTENSION}");
     }
 
-    private static void CombineFiles(string outputPath, HeaderInfo headerInfo, List<string> matchingFiles)
-    {
-        // If the headerfile is .dds, rename it to .dds.0 to prevent loss of data.  For
-        // game files that already have a .dds.0, that is the header file and it's safe to write
-        // to .dds.
-        if (Path.GetExtension(matchingFiles[0]) == $".{DDS_EXTENSION}")
+        private static void CombineFiles(string outputPath, HeaderInfo headerInfo, string headerFile, List<string> mipmapFiles)
         {
-            var newHeaderPath = Path.ChangeExtension(matchingFiles[0], $".{DDS_EXTENSION}.0");
-            if (!File.Exists(newHeaderPath))
-                File.Move(matchingFiles[0], newHeaderPath);
-            matchingFiles[0] = newHeaderPath;
-        }
+            // If the headerfile is .dds, rename it to .dds.0 to prevent loss of data.  For
+            // game files that already have a .dds.0, that is the header file and it's safe to write
+            // to .dds.
+            string effectiveHeaderFile = headerFile;
+            if (Path.GetExtension(headerFile) == $".{DDS_EXTENSION}")
+            {
+                var newHeaderPath = Path.ChangeExtension(headerFile, $".{DDS_EXTENSION}.0");
+                if (!File.Exists(newHeaderPath))
+                {
+                    try
+                    {
+                        // Use FileShare.ReadWrite | FileShare.Delete to allow maximum compatibility
+                        using (var stream = new FileStream(headerFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                        using (var destStream = new FileStream(newHeaderPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                        {
+                            stream.CopyTo(destStream);
+                        }
+                    }
+                    catch (IOException)
+                    {
+                        // If we can't open with FileStream, try a direct file copy
+                        File.Copy(headerFile, newHeaderPath, overwrite: false);
+                    }
+                }
+                effectiveHeaderFile = newHeaderPath;
+            }
 
         int totalHeaderSize = DDS_HEADER_SIZE + (headerInfo.DXT10Header != null ? DXT10_HEADER_SIZE : 0);
 
-        using var outputStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
+        // Use FileShare.Read to allow other processes to read while we're writing
+        using var outputStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read);
 
-        var serializedHeader = headerInfo.Header.Serialize();
-        outputStream.Write(serializedHeader, 0, DDS_HEADER_SIZE);
-        if (headerInfo.DXT10Header is not null)
-            outputStream.Write(headerInfo.DXT10Header.Serialize(), DDS_HEADER_SIZE, DXT10_HEADER_SIZE);
+        byte[] serializedHeader = headerInfo.Header.Serialize();
+        if (serializedHeader.Length >= DDS_HEADER_SIZE)
+        {
+            outputStream.Write(serializedHeader, 0, DDS_HEADER_SIZE);
+            
+            if (headerInfo.DXT10Header is not null)
+            {
+                byte[] dxt10Header = headerInfo.DXT10Header.Serialize();
+                if (dxt10Header != null && dxt10Header.Length >= DXT10_HEADER_SIZE)
+                {
+                    outputStream.Write(dxt10Header, 0, DXT10_HEADER_SIZE);
+                }
+            }
+        }
 
         var isCubeMap = (headerInfo.Header.Caps2 & DDSCaps2.CUBEMAP) != 0;
         var faces = isCubeMap ? 6 : 1;
 
         var mipMapSizes = GetMipMapSizes(headerInfo.Header);
-        var mipMapBytes = matchingFiles
-            .Skip(1) // Skip the header file
+        var mipMapBytes = mipmapFiles
             .OrderDescending()
-            .Select(File.ReadAllBytes).ToArray();
+            .Select(file => {
+                // Use FileShare.ReadWrite to ensure we can read the file even if it's being accessed
+                using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                var bytes = new byte[fs.Length];
+                fs.Read(bytes, 0, bytes.Length);
+                return bytes;
+            })
+            .ToArray();
 
         var postHeaderDataOffset = 0;
 
@@ -288,20 +374,4 @@ public class DDSFileCombiner
 
         return offset;
     }
-
-    //private static void WriteMipMapWithAlignment(FileStream outputStream, string mipmapFile)
-    //{
-    //    if (!File.Exists(mipmapFile))
-    //        throw new FileNotFoundException($"Mipmap file not found: {mipmapFile}");
-
-    //    using var mipmapStream = File.OpenRead(mipmapFile);
-    //    mipmapStream.CopyTo(outputStream);
-
-    //    // Align to 4 bytes
-    //    var remainder = mipmapStream.Length % 4;
-    //    if (remainder > 0)
-    //    {
-    //        var padding = new byte[4 - remainder];
-    //        outputStream.Write(padding, 0, padding.Length);
-    //    }
 }
