@@ -135,6 +135,7 @@ public class DDSFileCombiner
             case DxgiFormat.BC2_UNORM_SRGB:
             case DxgiFormat.BC3_UNORM:
             case DxgiFormat.BC3_UNORM_SRGB:
+            case DxgiFormat.BC6H_UF16:
                 blockSize = 16;
                 blockWidth = blockHeight = 4;
                 break;

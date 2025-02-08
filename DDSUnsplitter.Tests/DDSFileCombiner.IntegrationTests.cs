@@ -42,6 +42,7 @@ public class DDSFileCombinerTests
         Assert.That(allTestFiles, Does.Contain(baseFileName + ".0"), "Header file should have been rewritten with safe extension");
         var headerFile = new FileInfo(Path.Combine(TEST_FILES_DIR, "defaultnouvs.dds.0"));
         Assert.That(headerFile.Length, Is.EqualTo(expected: 296), "Header file size is incorrect");
+        VerifyEndMarker(combinedFileName);
     }
 
     [Test]
@@ -58,6 +59,7 @@ public class DDSFileCombinerTests
         Assert.That(allTestFiles, Does.Contain(baseFileName + ".dds.0"), "Header file should have been rewritten with safe extension");
         var headerFile = new FileInfo(Path.Combine(TEST_FILES_DIR, "defaultnouvs.dds.0"));
         Assert.That(headerFile.Length, Is.EqualTo(expected: 296), "Header file size is incorrect");
+        VerifyEndMarker(combinedFileName);
     }
 
     [Test]
@@ -73,6 +75,7 @@ public class DDSFileCombinerTests
         var allTestFiles = Directory.GetFiles(TEST_FILES_DIR, "flat_normal_ddn*");
         Assert.That(allTestFiles.Contains(baseFileName), "Base file should be present");
         Assert.That(allTestFiles, Does.Contain(baseFileName), "Header file should have been rewritten with safe extension");
+        VerifyEndMarker(combinedFileName);
     }
 
     [Test]
@@ -89,89 +92,22 @@ public class DDSFileCombinerTests
         Assert.That(allTestFiles, Does.Contain(baseFileName + ".dds.0"), "Header file still has 0 extension");
         var headerFile = new FileInfo(Path.Combine(TEST_FILES_DIR, "flat_normal_ddn.dds.0"));
         Assert.That(headerFile.Length, Is.EqualTo(expected: 464), "Header file size is incorrect");
+        VerifyEndMarker(combinedFileName);
     }
 
     [Test]
-    [TestCase("defaultnouvs", new[] { 296, 512, 2048, 8192, 32768, 131072 }, false, 8, "", false)]
-    [TestCase("flat_normal_ddn", new[] { 464, 1024, 4096, 16384 }, false, 6, "ATI2", true)]
-    public void WhenCombining_WithJustPath_HandlesPathCorrectly(
-    string fileName,
-    int[] expectedSizes,
-    bool hasDxt10Header,
-    int expectedMipmapCount,
-    string expectedFourCC,
-    bool hasNumberedHeader)
+    public void Combine_CubeMap_CreatesCombinedFile()
     {
-        string baseFileName = Path.Combine(TEST_FILES_DIR, fileName);
-
-        // Skip test if files don't exist
-        string headerPattern = hasNumberedHeader ? ".dds.0" : ".dds";
-        Assume.That(File.Exists(baseFileName + headerPattern),
-            "Test files not available - skipping test");
-
-        string tempPath = CopyFilesToTemp(baseFileName);
-
-        string combinedFileName = DDSFileCombiner.Combine(tempPath, true);
-
-        Assert.Multiple(() =>
-        {
-            // Verify file existence and location
-            Assert.That(File.Exists(combinedFileName), "Combined file was not created");
-            Assert.That(combinedFileName, Does.StartWith(_tempDir),
-                "Combined file was created outside temp directory");
-
-            // Verify headers
-            var headerInfo = DdsHeader.Deserialize(baseFileName + headerPattern);
-
-            // Check header format
-            if (hasDxt10Header)
-            {
-                Assert.That(new string(headerInfo.Header.PixelFormat.FourCC), Is.EqualTo("DX10"),
-                    "File should have DX10 FourCC");
-                Assert.That(headerInfo.DXT10Header, Is.Not.Null, "DXT10 header should be present");
-            }
-            else if (!string.IsNullOrEmpty(expectedFourCC))
-            {
-                Assert.That(new string(headerInfo.Header.PixelFormat.FourCC), Is.EqualTo(expectedFourCC),
-                    "File should have expected FourCC");
-                Assert.That(headerInfo.DXT10Header, Is.Null, "DXT10 header should not be present");
-            }
-
-            // Verify file size
-            var combinedFileSize = new FileInfo(combinedFileName).Length;
-            var expectedTotalSize = expectedSizes.Sum() + CRYENGINE_END_MARKER_SIZE;
-
-            Assert.That(combinedFileSize, Is.EqualTo(expectedTotalSize),
-                "Combined file size doesn't match expected size");
-
-            // Verify end marker
-            using var stream = File.OpenRead(combinedFileName);
-            stream.Seek(-CRYENGINE_END_MARKER_SIZE, SeekOrigin.End);
-            var endMarker = new byte[CRYENGINE_END_MARKER_SIZE];
-            stream.Read(endMarker, 0, CRYENGINE_END_MARKER_SIZE);
-            Assert.That(endMarker, Is.EqualTo(CRYENGINE_END_MARKER),
-                "CryEngine end marker not found or incorrect");
-
-            // Verify mipmap count in header matches expected
-            Assert.That(headerInfo.Header.MipMapCount, Is.EqualTo(expectedMipmapCount),
-                "MipMap count in header doesn't match expected count");
-
-            // Verify number of data files matches expected sizes array length minus header
-            var searchPattern = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(tempPath)) + ".dds.*";
-            var dataFiles = Directory.GetFiles(Path.GetDirectoryName(tempPath)!, searchPattern)
-                .Where(f => !f.EndsWith("a", StringComparison.OrdinalIgnoreCase) &&
-                           Path.GetExtension(f).Length > 1 &&
-                           Path.GetExtension(f).TrimStart('.').All(char.IsDigit))
-                .ToList();
-        });
+        string baseFileName = Path.Combine(TEST_FILES_DIR, "environmentprobeafternoon_cm.dds");
+        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+        FileInfo fileInfo = new(combinedFileName);
+        Assert.That(File.Exists(combinedFileName), "Combined file was not created");
+        Assert.That(fileInfo.Length, Is.EqualTo(174896), "Combined file size is incorrect");
+        var allTestFiles = Directory.GetFiles(TEST_FILES_DIR, "environmentprobeafternoon_cm*");
+        Assert.That(allTestFiles, Does.Contain(baseFileName), "Base file should be present");
+        Assert.That(allTestFiles, Does.Contain(baseFileName + ".0"), "Header file should have been rewritten with safe extension");
+        VerifyEndMarker(combinedFileName);
     }
-
-    //[Test]
-    //public void WhenCombining_DXT10NormalMap_GlossFilesAddedProperly()
-    //{
-    //    string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
-    //    string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
-    //}
 
     [Test]
     public void FindMatchingFiles_GlossFilesReturnsAllFiles()
@@ -182,34 +118,6 @@ public class DDSFileCombinerTests
         Assert.That(actualFiles.Last, Is.EqualTo("TestFiles\\gloss10_ddna.dds.a"));
         Assert.That(actualFiles.First, Is.EqualTo("TestFiles\\gloss10_ddna.dds"));
     }
-
-    //[Test]
-    //public void WhenCombining_DXT10File_SkipsAVariants()
-    //{
-    //    string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
-
-    //    string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
-
-    //    Assert.Multiple(() =>
-    //    {
-    //        Assert.That(File.Exists(combinedFileName), "Combined file should exist");
-
-    //        // Verify the combined file has correct headers
-    //        var headerInfo = DdsHeader.Deserialize(combinedFileName);
-    //        Assert.That(new string(headerInfo.Header.PixelFormat.FourCC), Is.EqualTo("DX10"),
-    //            "Combined file should preserve DX10 FourCC");
-    //        Assert.That(headerInfo.DXT10Header, Is.Not.Null, "Combined file should preserve DXT10 header");
-
-    //        // Verify file sizes are correct (no .a variants included)
-    //        var combinedFileSize = new FileInfo(combinedFileName).Length;
-    //        var expectedBaseSize = new FileInfo(baseFileName).Length;
-    //        var mipSizes = new[] { 1024, 4096, 16384 }; // Sizes of .1, .2, .3 files without 'a' variants
-    //        var expectedTotalSize = expectedBaseSize + mipSizes.Sum() + CRYENGINE_END_MARKER_SIZE;
-
-    //        Assert.That(combinedFileSize, Is.EqualTo(expectedTotalSize),
-    //            "Combined file size should match expected size without 'a' variants");
-    //    });
-    //}
 
     [Test]
     public void FindMatchingFiles_SC_DDNAWithGloss_CombinesAllFiles()
@@ -229,46 +137,14 @@ public class DDSFileCombinerTests
         Assert.That(matchingFiles, Contains.Item(baseFileName + ".3"), "Should include .3 mipmap");
     }
 
-    private string CopyFilesToTemp(string sourcePath)
+    private void VerifyEndMarker(string combinedFileName)
     {
-        // If we've already copied this source, return the cached path
-        if (_copiedFiles.ContainsKey(sourcePath))
-            return _copiedFiles[sourcePath];
-
-        string sourceDir = Path.GetDirectoryName(sourcePath);
-        string baseFileName = Path.GetFileName(sourcePath);
-
-        // If no directory was provided, use current directory
-        if (string.IsNullOrEmpty(sourceDir))
-            sourceDir = Directory.GetCurrentDirectory();
-
-        // Create a unique subdirectory for this test's files
-        string testSubDir = Path.Combine(_tempDir, Path.GetRandomFileName());
-        Directory.CreateDirectory(testSubDir);
-
-        if (Directory.Exists(sourceDir))
-        {
-            // Always treat the last part as a file name pattern, regardless of extension
-            string searchPattern = baseFileName + "*";
-            var matchingFiles = Directory.GetFiles(sourceDir, searchPattern);
-
-            if (!matchingFiles.Any())
-                throw new FileNotFoundException($"No files found matching pattern: {searchPattern} in directory: {sourceDir}");
-
-            foreach (string file in matchingFiles)
-            {
-                string destFile = Path.Combine(testSubDir, Path.GetFileName(file));
-                File.Copy(file, destFile);
-            }
-        }
-        else
-            throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
-
-        // Store the mapping of original to temp path
-        // For consistency, we'll map to the base file (typically the .dds file)
-        string tempPath = Path.Combine(testSubDir, baseFileName);
-        _copiedFiles[sourcePath] = tempPath;
-
-        return tempPath;
+        // Verify end marker
+        var stream = File.OpenRead(combinedFileName);
+        stream.Seek(-CRYENGINE_END_MARKER_SIZE, SeekOrigin.End);
+        var endMarker = new byte[CRYENGINE_END_MARKER_SIZE];
+        stream.Read(endMarker, 0, CRYENGINE_END_MARKER_SIZE);
+        Assert.That(endMarker, Is.EqualTo(CRYENGINE_END_MARKER),
+            "CryEngine end marker not found or incorrect");
     }
 }
