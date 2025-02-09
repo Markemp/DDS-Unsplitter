@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿using DDSUnsplitter.Library.Models;
+﻿using DDSUnsplitter.Library.Models;
 using static DDSUnsplitter.Library.Models.DdsConstants;
 
 namespace DDSUnsplitter.Library;
@@ -37,14 +37,16 @@ public class DDSFileCombiner
 
         var headerInfo = DdsHeader.Deserialize(fileSet.HeaderFile);
         var outputPath = CreateOutputPath(directory, fileNameWithoutExtension, useSafeName, combinedFileNameIdentifier);
-        
+
         // Combine main texture files
         CombineFiles(outputPath, headerInfo, fileSet.HeaderFile, fileSet.MipmapFiles);
 
         // If there's a gloss texture, combine those files too
         if (fileSet.GlossHeaderFile != null && fileSet.GlossMipmapFiles != null)
         {
-            var glossOutputPath = Path.GetFileNameWithoutExtension(outputPath) + "_gloss" + Path.GetExtension(outputPath);
+            var glossOutputPath = Path.Combine(
+                Path.GetDirectoryName(outputPath)!,
+                Path.GetFileNameWithoutExtension(outputPath) + "_gloss" + Path.GetExtension(outputPath));
             var glossHeaderInfo = DdsHeader.Deserialize(fileSet.GlossHeaderFile);
             CombineFiles(glossOutputPath, glossHeaderInfo, fileSet.GlossHeaderFile, fileSet.GlossMipmapFiles);
         }
@@ -72,13 +74,11 @@ public class DDSFileCombiner
 
         // Check if base .dds file exists and is valid
         var baseFile = allFiles.FirstOrDefault(f => f.EndsWith($".{DDS_EXTENSION}"));
-        if (baseFile != null)
+        if (baseFile is not null)
         {
             var headerInfo = DdsHeader.Deserialize(baseFile);
             if (IsAlreadyValidDDSFile(headerInfo, new FileInfo(baseFile)))
-            {
                 return new DdsFileSet { HeaderFile = baseFile, IsAlreadyCombined = true };
-            }
         }
 
         // Find main texture header and mipmaps
@@ -100,7 +100,8 @@ public class DDSFileCombiner
             // Get gloss mipmaps (files ending in .dds.1a, .dds.2a, etc.)
             result.GlossMipmapFiles = allFiles
                 .Where(f => System.Text.RegularExpressions.Regex.IsMatch(f, @"\.dds\.\d+a$"))
-                .OrderBy(f => {
+                .OrderBy(f =>
+                {
                     var match = System.Text.RegularExpressions.Regex.Match(f, @"\.dds\.(\d+)a$");
                     return int.Parse(match.Groups[1].Value);
                 })
@@ -178,6 +179,7 @@ public class DDSFileCombiner
         {
             case DxgiFormat.BC1_UNORM:
             case DxgiFormat.BC1_UNORM_SRGB:
+            case DxgiFormat.BC4_UNORM:
                 blockSize = 8;
                 blockWidth = blockHeight = 4;
                 break;
@@ -186,8 +188,9 @@ public class DDSFileCombiner
             case DxgiFormat.BC2_UNORM_SRGB:
             case DxgiFormat.BC3_UNORM:
             case DxgiFormat.BC3_UNORM_SRGB:
-            case DxgiFormat.BC6H_UF16:
             case DxgiFormat.BC5_SNORM:
+            case DxgiFormat.BC6H_UF16:
+            case DxgiFormat.BC7_UNORM:
                 blockSize = 16;
                 blockWidth = blockHeight = 4;
                 break;
@@ -238,34 +241,32 @@ public class DDSFileCombiner
         return Path.Combine(directory, $"{fileNameWithoutExtension}{suffix}.{DDS_EXTENSION}");
     }
 
-        private static void CombineFiles(string outputPath, HeaderInfo headerInfo, string headerFile, List<string> mipmapFiles)
+    private static void CombineFiles(string outputPath, HeaderInfo headerInfo, string headerFile, List<string> mipmapFiles)
+    {
+        // If the headerfile is .dds, rename it to .dds.0 to prevent loss of data.  For
+        // game files that already have a .dds.0, that is the header file and it's safe to write
+        // to .dds.
+        string effectiveHeaderFile = headerFile;
+        if (Path.GetExtension(headerFile) == $".{DDS_EXTENSION}")
         {
-            // If the headerfile is .dds, rename it to .dds.0 to prevent loss of data.  For
-            // game files that already have a .dds.0, that is the header file and it's safe to write
-            // to .dds.
-            string effectiveHeaderFile = headerFile;
-            if (Path.GetExtension(headerFile) == $".{DDS_EXTENSION}")
+            var newHeaderPath = Path.ChangeExtension(headerFile, $".{DDS_EXTENSION}.0");
+            if (!File.Exists(newHeaderPath))
             {
-                var newHeaderPath = Path.ChangeExtension(headerFile, $".{DDS_EXTENSION}.0");
-                if (!File.Exists(newHeaderPath))
+                try
                 {
-                    try
-                    {
-                        // Use FileShare.ReadWrite | FileShare.Delete to allow maximum compatibility
-                        using (var stream = new FileStream(headerFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-                        using (var destStream = new FileStream(newHeaderPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                        {
-                            stream.CopyTo(destStream);
-                        }
-                    }
-                    catch (IOException)
-                    {
-                        // If we can't open with FileStream, try a direct file copy
-                        File.Copy(headerFile, newHeaderPath, overwrite: false);
-                    }
+                    // Use FileShare.ReadWrite | FileShare.Delete to allow maximum compatibility
+                    using var stream = new FileStream(headerFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var destStream = new FileStream(newHeaderPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                    stream.CopyTo(destStream);
                 }
-                effectiveHeaderFile = newHeaderPath;
+                catch (IOException)
+                {
+                    // If we can't open with FileStream, try a direct file copy
+                    File.Copy(headerFile, newHeaderPath, overwrite: false);
+                }
             }
+            effectiveHeaderFile = newHeaderPath;
+        }
 
         int totalHeaderSize = DDS_HEADER_SIZE + (headerInfo.DXT10Header != null ? DXT10_HEADER_SIZE : 0);
 
@@ -276,14 +277,12 @@ public class DDSFileCombiner
         if (serializedHeader.Length >= DDS_HEADER_SIZE)
         {
             outputStream.Write(serializedHeader, 0, DDS_HEADER_SIZE);
-            
+
             if (headerInfo.DXT10Header is not null)
             {
                 byte[] dxt10Header = headerInfo.DXT10Header.Serialize();
-                if (dxt10Header != null && dxt10Header.Length >= DXT10_HEADER_SIZE)
-                {
+                if (dxt10Header is not null && dxt10Header.Length >= DXT10_HEADER_SIZE)
                     outputStream.Write(dxt10Header, 0, DXT10_HEADER_SIZE);
-                }
             }
         }
 
@@ -293,7 +292,8 @@ public class DDSFileCombiner
         var mipMapSizes = GetMipMapSizes(headerInfo.Header);
         var mipMapBytes = mipmapFiles
             .OrderDescending()
-            .Select(file => {
+            .Select(file =>
+            {
                 // Use FileShare.ReadWrite to ensure we can read the file even if it's being accessed
                 using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 var bytes = new byte[fs.Length];
@@ -310,7 +310,7 @@ public class DDSFileCombiner
             for (var mipMap = 0; mipMap < headerInfo.Header.MipMapCount; mipMap++)
             {
                 var mipMapSize = mipMapSizes[mipMap];
-                var mipMapByteCount = GetMipmapSize(mipMapSize.Width, mipMapSize.Height, headerInfo.Header.PixelFormat);
+                var mipMapByteCount = CalculateMipSize(mipMapSize.Width, mipMapSize.Height, headerInfo);
 
                 if (mipMap < mipMapBytes.Length)
                 {
@@ -353,14 +353,6 @@ public class DDSFileCombiner
 
         return mipMapSizes;
     }
-
-    private static int GetMipmapSize(int width, int height, DdsPixelFormat pixelFormat)
-    {
-        int blockSize = IsDXT1(pixelFormat) ? 8 : 16;
-        return Math.Max(1, (width + 3) / 4) * Math.Max(1, (height + 3) / 4) * blockSize;
-    }
-
-    private static bool IsDXT1(DdsPixelFormat pixelFormat)=> pixelFormat.GetFourCCString() == "DXT1";
 
     private static int GetInitialOffset(HeaderInfo headerInfo)
     {

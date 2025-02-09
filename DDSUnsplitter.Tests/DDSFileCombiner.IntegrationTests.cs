@@ -192,7 +192,7 @@ public class DDSFileCombinerTests
     }
 
     [Test]
-    public void Combine_GlossFile_CreatesNormalAndGlossFiles()
+    public void Combine_DdnaFile_CreatesNormalAndGlossFiles()
     {
         string baseFileName = Path.Combine(_tempDir, "gloss10_ddna.dds");
         string directory = Path.GetDirectoryName(baseFileName)!;
@@ -200,8 +200,45 @@ public class DDSFileCombinerTests
 
         string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
 
+        // Check normal file
         FileInfo normalFile = new FileInfo(combinedFileName);
-        FileInfo glossFile = new FileInfo(Path.GetFileNameWithoutExtension(combinedFileName) + "_gloss" + Path.GetExtension(combinedFileName));
+        Assert.That(normalFile.Exists, "Normal combined file was not created");
+        Assert.That(normalFile.Length, Is.EqualTo(21996), "Normal combined file size is incorrect");
+
+        // Check gloss file
+        string glossFileName = Path.Combine(directory, Path.GetFileNameWithoutExtension(combinedFileName) + "_gloss" + Path.GetExtension(combinedFileName));
+        FileInfo glossFile = new FileInfo(glossFileName);
+        Assert.That(glossFile.Exists, "Gloss combined file was not created");
+        Assert.That(glossFile.Length, Is.EqualTo(11076), "Gloss combined file size is incorrect");
+
+        // Verify end markers on both files
+        VerifyEndMarker(combinedFileName);
+        VerifyEndMarker(glossFileName);
+    }
+
+    [Test]
+    public void Combine_ShovelDdnaFile_CreatesNormalAndGlossFiles()
+    {
+        string baseFileName = Path.Combine(_tempDir, "shovel_ddna.dds");
+        string directory = Path.GetDirectoryName(baseFileName)!;
+        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(baseFileName);
+
+        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+
+        // Check normal file
+        FileInfo normalFile = new FileInfo(combinedFileName);
+        Assert.That(normalFile.Exists, "Normal combined file was not created");
+        Assert.That(normalFile.Length, Is.EqualTo(2796348), "Normal combined file size is incorrect");
+
+        // Check gloss file
+        string glossFileName = Path.Combine(directory, Path.GetFileNameWithoutExtension(combinedFileName) + "_gloss" + Path.GetExtension(combinedFileName));
+        FileInfo glossFile = new FileInfo(glossFileName);
+        Assert.That(glossFile.Exists, "Gloss combined file was not created");
+        Assert.That(glossFile.Length, Is.EqualTo(1398252), "Gloss combined file size is incorrect");
+
+        // Verify end markers on both files
+        VerifyEndMarker(combinedFileName);
+        VerifyEndMarker(glossFileName);
     }
 
     private static void VerifyEndMarker(string combinedFileName)
