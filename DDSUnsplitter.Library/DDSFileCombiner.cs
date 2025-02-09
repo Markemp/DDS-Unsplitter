@@ -44,7 +44,7 @@ public class DDSFileCombiner
         // If there's a gloss texture, combine those files too
         if (fileSet.GlossHeaderFile != null && fileSet.GlossMipmapFiles != null)
         {
-            var glossOutputPath = Path.ChangeExtension(outputPath, $".{DDS_EXTENSION}.a");
+            var glossOutputPath = Path.GetFileNameWithoutExtension(outputPath) + "_gloss" + Path.GetExtension(outputPath);
             var glossHeaderInfo = DdsHeader.Deserialize(fileSet.GlossHeaderFile);
             CombineFiles(glossOutputPath, glossHeaderInfo, fileSet.GlossHeaderFile, fileSet.GlossMipmapFiles);
         }

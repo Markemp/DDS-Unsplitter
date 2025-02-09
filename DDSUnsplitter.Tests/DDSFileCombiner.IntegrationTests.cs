@@ -1,5 +1,4 @@
 using DDSUnsplitter.Library;
-using DDSUnsplitter.Library.Models;
 using NUnit.Framework;
 using static DDSUnsplitter.Library.Models.DdsConstants;
 
@@ -116,10 +115,28 @@ public class DDSFileCombinerTests
     }
 
     [Test]
+    public void Combine_BaseFileHasDDS0ExtensionAndShortNameWithDDS_CreatesCombinedFile()
+    {
+        string baseFileName = Path.Combine(_tempDir, "flat_normal_ddn.dds");
+
+        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+
+        FileInfo fileInfo = new(combinedFileName);
+        Assert.That(File.Exists(combinedFileName), "Combined file was not created");
+        Assert.That(fileInfo.Length, Is.EqualTo(21976), "Combined file size is incorrect");
+        var allTestFiles = Directory.GetFiles(_tempDir, "flat_normal_ddn*");
+        var headerFile = new FileInfo(Path.Combine(_tempDir, "flat_normal_ddn.dds.0"));
+        Assert.That(headerFile.Length, Is.EqualTo(expected: 464), "Header file size is incorrect");
+        VerifyEndMarker(combinedFileName);
+    }
+
+    [Test]
     public void Combine_CubeMap_CreatesCombinedFile()
     {
         string baseFileName = Path.Combine(_tempDir, "environmentprobeafternoon_cm.dds");
+
         string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+
         FileInfo fileInfo = new(combinedFileName);
         Assert.That(File.Exists(combinedFileName), "Combined file was not created");
         Assert.That(fileInfo.Length, Is.EqualTo(524412), "Combined file size is incorrect");
@@ -130,7 +147,7 @@ public class DDSFileCombinerTests
     }
 
     [Test]
-    public void FindMatchingFiles_GlossFilesReturnsAllFiles()
+    public void FindMatchingFiles_NoExtension_GlossFilesReturnsAllFiles()
     {
         string baseFileName = "gloss10_ddna";
         var fileSet = DDSFileCombiner.FindMatchingFiles(_tempDir, baseFileName);
@@ -151,7 +168,7 @@ public class DDSFileCombinerTests
     }
 
     [Test]
-    public void FindMatchingFiles_SC_DDNAWithGloss_CombinesAllFiles()
+    public void FindMatchingFiles_WithExtension_GlossFilesReturnsAllFiles()
     {
         string baseFileName = Path.Combine(_tempDir, "gloss10_ddna.dds");
         string directory = Path.GetDirectoryName(baseFileName)!;
@@ -174,7 +191,20 @@ public class DDSFileCombinerTests
         Assert.That(fileSet.GlossMipmapFiles, Does.Contain(baseFileName + ".3a"), "Missing gloss mipmap 3a");
     }
 
-    private void VerifyEndMarker(string combinedFileName)
+    [Test]
+    public void Combine_GlossFile_CreatesNormalAndGlossFiles()
+    {
+        string baseFileName = Path.Combine(_tempDir, "gloss10_ddna.dds");
+        string directory = Path.GetDirectoryName(baseFileName)!;
+        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(baseFileName);
+
+        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+
+        FileInfo normalFile = new FileInfo(combinedFileName);
+        FileInfo glossFile = new FileInfo(Path.GetFileNameWithoutExtension(combinedFileName) + "_gloss" + Path.GetExtension(combinedFileName));
+    }
+
+    private static void VerifyEndMarker(string combinedFileName)
     {
         // Verify end marker
         using var stream = File.OpenRead(combinedFileName);
