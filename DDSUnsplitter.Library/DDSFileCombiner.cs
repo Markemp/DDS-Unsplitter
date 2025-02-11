@@ -161,7 +161,7 @@ public class DDSFileCombiner
         return offsets;
     }
 
-    private static int CalculateMipSize(int width, int height, HeaderInfo headerInfo)
+    public static int CalculateMipSize(int width, int height, HeaderInfo headerInfo)
     {
         if (headerInfo.DXT10Header is not null)
             return CalculateMipSizeDX10(width, height, headerInfo.DXT10Header.DxgiFormat);
@@ -189,11 +189,20 @@ public class DDSFileCombiner
             case DxgiFormat.BC3_UNORM:
             case DxgiFormat.BC3_UNORM_SRGB:
             case DxgiFormat.BC5_SNORM:
+            case DxgiFormat.BC5_UNORM:
             case DxgiFormat.BC6H_UF16:
             case DxgiFormat.BC7_UNORM:
+            case DxgiFormat.BC7_UNORM_SRGB:
                 blockSize = 16;
                 blockWidth = blockHeight = 4;
                 break;
+
+            // Uncompressed formats
+            case DxgiFormat.R8_UNORM:
+                return width * height;     // 8 bits = 1 byte per pixel
+
+            case DxgiFormat.R8G8_UNORM:
+                return width * height * 2; // 16 bits = 2 bytes per pixel
 
             // Add other DXGI formats as needed
 
@@ -209,29 +218,31 @@ public class DDSFileCombiner
 
     private static int CalculateMipSizeLegacy(int width, int height, DdsPixelFormat pixelFormat)
     {
-        // Handle legacy DDS formats (DXT1, DXT3, DXT5, etc.)
-        if ((pixelFormat.Flags & pixelFormat.Flags) != 0)
+        // First check if the format uses FourCC
+        if ((pixelFormat.Flags & DDSPixelFormatFlags.FourCC) != 0)
         {
+            // Only look at FourCC if the flag indicates we should
             var fourCC = new string(pixelFormat.FourCC);
             switch (fourCC)
             {
                 case "DXT1":
                     return ((width + 3) / 4) * ((height + 3) / 4) * 8;
-
                 case "DXT3":
                 case "DXT5":
                 case "ATI2":
                 case "BC5_SNORM":
                     return ((width + 3) / 4) * ((height + 3) / 4) * 16;
-
                 default:
-                    throw new NotSupportedException($"FourCC format {pixelFormat.FourCC} not supported");
+                    throw new NotSupportedException($"FourCC format {fourCC} not supported");
             }
         }
-
-        // Handle uncompressed formats
-        int bpp = pixelFormat.RGBBitCount;
-        return ((width * height * bpp + 7) / 8);
+        else
+        {
+            // If FourCC flag is not set, then it's an uncompressed format
+            // described by the RGB/RGBA bits and masks
+            int bpp = pixelFormat.RGBBitCount;
+            return ((width * height * bpp + 7) / 8);
+        }
     }
 
     private static string CreateOutputPath(string directory, string fileNameWithoutExtension,

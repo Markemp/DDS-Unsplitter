@@ -241,6 +241,23 @@ public class DDSFileCombinerTests
         VerifyEndMarker(glossFileName);
     }
 
+    [Test]
+    public void DsConceptChild01_sdf_ShouldNotCombine()
+    {
+        string baseFileName = Path.Combine(_tempDir, "DSConceptChild01_sdf.dds");
+        string directory = Path.GetDirectoryName(baseFileName)!;
+        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(baseFileName);
+
+        string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
+
+        // Assert the returned filename is the same as input (no combining occurred)
+        Assert.That(combinedFileName, Is.EqualTo(baseFileName));
+
+        // Optional: Also verify no new files were created
+        var filesInDir = Directory.GetFiles(directory, "DSConceptChild01*");
+        Assert.That(filesInDir, Has.Length.EqualTo(1), "No additional files should be created");
+    }
+
     private static void VerifyEndMarker(string combinedFileName)
     {
         // Verify end marker

@@ -1,20 +1,24 @@
 # DDS-Unsplitter
 
-A utility for combining split DDS (DirectDraw Surface) texture files, specifically designed for handling CryEngine texture formats.
+A utility for combining split DDS (DirectDraw Surface) texture files, specifically designed for 
+handling CryEngine texture formats.
 
 ## Overview
 
-DDS-Unsplitter combines split DDS texture files back into their original form. It's particularly useful for working with CryEngine textures where a single texture might be split into multiple files (a header file and several mipmap files).
+DDS-Unsplitter combines split DDS texture files back into their original form. It's particularly useful 
+for working with CryEngine textures where a single texture might be split into multiple files 
+(a header file and several mipmap files).
 
 ### Features
 
 - Combines split DDS files into a single file
 - Handles both standard DDS and DXT10 formats
-- Supports ATI2/BC5 normal map formats
 - Preserves CryEngine-specific formatting
 - Handles numbered header files (.dds.0) and regular headers (.dds)
 - Maintains proper byte alignment
 - Option for safe file handling (prevents overwriting originals)
+- Properly handles DDS cubemaps and signed distance fields (SDF) files
+- Converts DDNA (split normal and gloss textures) into a pair of files
 
 ## Installation
 
