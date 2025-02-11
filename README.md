@@ -7,15 +7,19 @@ handling CryEngine texture formats.
 
 DDS-Unsplitter combines split DDS texture files back into their original form. It's particularly useful 
 for working with CryEngine textures where a single texture might be split into multiple files 
-(a header file and several mipmap files).
+(a header file and several mipmap files), including DDS cubemaps.
+
+For DDNA files with the gloss channel in the alpha layer, the unsplitter will take the texture and
+create 2 separate textures: one with the normal map and a second with the gloss details.  The gloss
+texture will have `_gloss` appended to the file name, prior to the extension.  For example, if you
+convert the file `gloss_ddna.dds`, you will end up with a `gloss_ddna.dds` file with the normal data.
+
 
 ### Features
 
 - Combines split DDS files into a single file
 - Handles both standard DDS and DXT10 formats
 - Preserves CryEngine-specific formatting
-- Handles numbered header files (.dds.0) and regular headers (.dds)
-- Maintains proper byte alignment
 - Option for safe file handling (prevents overwriting originals)
 - Properly handles DDS cubemaps and signed distance fields (SDF) files
 - Converts DDNA (split normal and gloss textures) into a pair of files
