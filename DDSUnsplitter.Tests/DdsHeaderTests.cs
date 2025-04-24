@@ -33,7 +33,7 @@ public class DdsHeaderTests
     {
         string baseFileName = Path.Combine(TEST_FILES_DIR, fileName);
 
-        var headerInfo = DdsHeader.Deserialize(baseFileName);
+        var headerInfo = DdsHeader.Deserialize(File.ReadAllBytes(baseFileName));
 
         Assert.Multiple(() =>
         {
@@ -49,7 +49,7 @@ public class DdsHeaderTests
     {
         string baseFileName = Path.Combine(TEST_FILES_DIR, "gloss10_ddna.dds");
 
-        var headerInfo = DdsHeader.Deserialize(baseFileName);
+        var headerInfo = DdsHeader.Deserialize(File.ReadAllBytes(baseFileName));
 
         Assert.Multiple(() =>
         {

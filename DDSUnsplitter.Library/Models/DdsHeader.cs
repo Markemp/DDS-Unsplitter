@@ -50,9 +50,8 @@ public sealed record DdsHeader
         return stream.ToArray();
     }
 
-    public static HeaderInfo Deserialize(string headerFile)
+    public static HeaderInfo Deserialize(byte[] fileContent)
     {
-        byte[] fileContent = File.ReadAllBytes(headerFile);
         using var stream = new MemoryStream(fileContent);
         using var reader = new BinaryReader(stream);
 
@@ -84,7 +83,7 @@ public sealed record DdsHeader
         // if not at EOF, read the remaining to a byte array and store in HeaderInfo
         int remainingBytes = (int)(stream.Length - stream.Position);
         byte[] postHeaderData = new byte[remainingBytes];
-        stream.Read(postHeaderData, 0, remainingBytes);
+        stream.ReadExactly(postHeaderData, 0, remainingBytes);
 
         return new HeaderInfo()
         {

@@ -37,7 +37,7 @@ class Program
             if (!Path.IsPathRooted(filename) && !filename.StartsWith("."))
                 filename = Path.Combine(".", filename);
 
-            string combinedFile = DDSFileCombiner.Combine(filename, useSafeName);
+            string combinedFile = new DDSFileCombiner(new RealFileSystem()).Combine(filename, useSafeName);
             Console.WriteLine($"Combined file: {combinedFile}");
         }
         catch (Exception ex)
