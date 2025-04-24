@@ -1,0 +1,5 @@
+T:System.IO.File; Do not do direct file IO
+T:System.IO.FileInfo; Do not do direct file IO
+T:System.IO.FileStream; Do not do direct file IO
+T:System.IO.Directory; Do not do direct file IO
+M:System.IO.Path.GetTempPath; Do not do direct file IO
