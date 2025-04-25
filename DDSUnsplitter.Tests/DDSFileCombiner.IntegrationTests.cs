@@ -150,7 +150,7 @@ public class DDSFileCombinerTests
     public void FindMatchingFiles_NoExtension_GlossFilesReturnsAllFiles()
     {
         string baseFileName = "gloss10_ddna";
-        var fileSet = new DDSFileCombiner(new RealFileSystem()).FindMatchingFiles(_tempDir, baseFileName);
+        var fileSet = new DdsCombiner(new RealFileSystem()).FindMatchingFiles(_tempDir, baseFileName);
         
         // Check main texture files
         Assert.That(fileSet.HeaderFile, Is.EqualTo(Path.Combine(_tempDir, "gloss10_ddna.dds")), "Main header file incorrect");
@@ -174,7 +174,7 @@ public class DDSFileCombinerTests
         string directory = Path.GetDirectoryName(baseFileName)!;
         string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(baseFileName);
 
-        var fileSet = new DDSFileCombiner(new RealFileSystem()).FindMatchingFiles(directory, fileNameWithoutExtension);
+        var fileSet = new DdsCombiner(new RealFileSystem()).FindMatchingFiles(directory, fileNameWithoutExtension);
 
         // Check main texture files
         Assert.That(fileSet.HeaderFile, Is.EqualTo(baseFileName), "Main header file incorrect");

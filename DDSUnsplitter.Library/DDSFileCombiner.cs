@@ -3,69 +3,17 @@ using static DDSUnsplitter.Library.Models.DdsConstants;
 
 namespace DDSUnsplitter.Library;
 
-/// <summary>Combines split DDS files back into a single file, handling CryEngine-specific formatting</summary>
-public class DDSFileCombiner
+public class DdsCombiner
 {
     private readonly IFileSystem _fileSystem;
 
-    public DDSFileCombiner(IFileSystem fileSystem)
+    public DdsCombiner(IFileSystem fileSystem)
     {
         _fileSystem = fileSystem;
     }
-    
-    /// <summary>
-    /// Combines split DDS files into a single file
-    /// </summary>
-    /// <param name="baseFileName">Path to the header file</param>
-    /// <param name="useSafeName">If true, adds an identifier to the output filename</param>
-    /// <param name="combinedFileNameIdentifier">Identifier to add to the output filename when useSafeName is true</param>
-    /// <returns>Path to the combined file</returns>
-    public string Combine(string baseFileName, bool useSafeName = false, string combinedFileNameIdentifier = "combined")
-    {
-        ArgumentNullException.ThrowIfNull(baseFileName);
 
-        var (directory, fileNameWithoutExtension) = PrepareFileInfo(baseFileName);
-        var fileSet = FindMatchingFiles(directory, fileNameWithoutExtension);
 
-        if (fileSet.IsAlreadyCombined)
-        {
-            Console.WriteLine($"File {fileSet.HeaderFile} is already a valid DDS file. Skipping combining.");
-            return fileSet.HeaderFile;
-        }
-
-        using var headerStream = _fileSystem.OpenRead(fileSet.HeaderFile);
-        var headerInfo = HeaderInfo.Deserialize(headerStream);
-        var outputPath = CreateOutputPath(directory, fileNameWithoutExtension, useSafeName, combinedFileNameIdentifier);
-
-        // Combine main texture files
-        CombineFiles(outputPath, headerInfo, fileSet.HeaderFile, fileSet.MipmapFiles);
-
-        // If there's a gloss texture, combine those files too
-        if (fileSet.GlossHeaderFile != null && fileSet.GlossMipmapFiles != null)
-        {
-            var glossOutputPath = Path.Combine(
-                Path.GetDirectoryName(outputPath)!,
-                Path.GetFileNameWithoutExtension(outputPath) + "_gloss" + Path.GetExtension(outputPath));
-            using var fs = _fileSystem.OpenRead(fileSet.GlossHeaderFile);
-            var glossHeaderInfo = HeaderInfo.Deserialize(fs);
-            CombineFiles(glossOutputPath, glossHeaderInfo, fileSet.GlossHeaderFile, fileSet.GlossMipmapFiles);
-        }
-
-        return outputPath;
-    }
-
-    private static (string directory, string fileNameWithoutExtension) PrepareFileInfo(string baseFileName)
-    {
-        string? directory = Path.GetDirectoryName(baseFileName);
-        if (directory is null)
-            throw new DirectoryNotFoundException("Could not determine directory from base file name");
-
-        // Remove both extensions (e.g., "file.dds.1" -> "file")
-        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(baseFileName));
-        return (directory, fileNameWithoutExtension);
-    }
-
-    public  DdsFileSet FindMatchingFiles(string directory, string fileNameWithoutExtension)
+    public DdsFileSet FindMatchingFiles(string directory, string fileNameWithoutExtension)
     {
         var result = new DdsFileSet();
         var allFiles = _fileSystem.EnumerateFiles(directory, $"{fileNameWithoutExtension}*")
@@ -112,7 +60,7 @@ public class DDSFileCombiner
         return result;
     }
 
-    private static bool IsAlreadyValidDDSFile(HeaderInfo headerInfo, int fileLength)
+    private bool IsAlreadyValidDDSFile(HeaderInfo headerInfo, int fileLength)
     {
         var offsets = CalculateMipmapOffsets(headerInfo);
 
@@ -123,7 +71,7 @@ public class DDSFileCombiner
         return fileLength > offsets[^1];
     }
 
-    public static List<long> CalculateMipmapOffsets(HeaderInfo headerInfo)
+    public List<long> CalculateMipmapOffsets(HeaderInfo headerInfo)
     {
         var header = headerInfo.Header;
         int width = header.Width;
@@ -159,11 +107,11 @@ public class DDSFileCombiner
         return offsets;
     }
 
-    private static int CalculateMipSize(int width, int height, HeaderInfo headerInfo)
+    public int CalculateMipSize(int width, int height, HeaderInfo headerInfo)
     {
         if (headerInfo.DXT10Header is { } header)
             return CalculateMipSizeDX10(width, height, header.DxgiFormat);
-        
+
         return CalculateMipSizeLegacy(width, height, headerInfo.Header.PixelFormat);
     }
 
@@ -197,7 +145,7 @@ public class DDSFileCombiner
 
             // Uncompressed formats
             case DxgiFormat.R8_UNORM:
-                return width * height;     // 8 bits = 1 byte per pixel
+                return width * height; // 8 bits = 1 byte per pixel
 
             case DxgiFormat.R8G8_UNORM:
                 return width * height * 2; // 16 bits = 2 bytes per pixel
@@ -242,95 +190,7 @@ public class DDSFileCombiner
         }
     }
 
-    private static string CreateOutputPath(string directory, string fileNameWithoutExtension,
-        bool useSafeName, string combinedFileNameIdentifier)
-    {
-        var suffix = useSafeName ? $".{combinedFileNameIdentifier}" : null;
-        return Path.Combine(directory, $"{fileNameWithoutExtension}{suffix}.{DDS_EXTENSION}");
-    }
-
-    private void CombineFiles(string outputPath, HeaderInfo headerInfo, string headerFile, List<string> mipmapFiles)
-    {
-        // If the headerfile is .dds, rename it to .dds.0 to prevent loss of data.  For
-        // game files that already have a .dds.0, that is the header file and it's safe to write
-        // to .dds.
-        string effectiveHeaderFile = headerFile;
-        if (Path.GetExtension(headerFile) == $".{DDS_EXTENSION}")
-        {
-            var newHeaderPath = Path.ChangeExtension(headerFile, $".{DDS_EXTENSION}.0");
-            if (!_fileSystem.FileExists(newHeaderPath))
-            {
-                try
-                {
-                    // Use FileShare.ReadWrite | FileShare.Delete to allow maximum compatibility
-                    using var stream = new FileStream(headerFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                    using var destStream = new FileStream(newHeaderPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                    stream.CopyTo(destStream);
-                }
-                catch (IOException)
-                {
-                    // If we can't open with FileStream, try a direct file copy
-                    File.Copy(headerFile, newHeaderPath, overwrite: false);
-                }
-            }
-            effectiveHeaderFile = newHeaderPath;
-        }
-
-        int totalHeaderSize = DDS_HEADER_SIZE + (headerInfo.DXT10Header != null ? DXT10_HEADER_SIZE : 0);
-
-        // Use FileShare.Read to allow other processes to read while we're writing
-        using var outputStream = _fileSystem.OpenWrite(outputPath);
-
-        headerInfo.Serialize(outputStream);
-
-        var isCubeMap = (headerInfo.Header.Caps2 & DDSCaps2.CUBEMAP) != 0;
-        var faces = isCubeMap ? 6 : 1;
-
-        var mipMapSizes = GetMipMapSizes(headerInfo.Header);
-        var mipMapBytes = mipmapFiles
-            .OrderDescending()
-            .Select(_fileSystem.ReadAllBytes)
-            .ToArray();
-
-        var postHeaderDataOffset = 0;
-
-        // For cubemaps, we need to organize the data by face first
-        for (var cubeFace = 0; cubeFace < faces; cubeFace++)
-        {
-            for (var mipMap = 0; mipMap < headerInfo.Header.MipMapCount; mipMap++)
-            {
-                var mipMapSize = mipMapSizes[mipMap];
-                var mipMapByteCount = CalculateMipSize(mipMapSize.Width, mipMapSize.Height, headerInfo);
-
-                if (mipMap < mipMapBytes.Length)
-                {
-                    // For cubemaps, each mipmap file should contain all faces
-                    // So we read from the appropriate face offset within each mipmap file
-                    var faceOffset = isCubeMap ? (cubeFace * mipMapByteCount) : 0;
-                    if (faceOffset + mipMapByteCount <= mipMapBytes[mipMap].Length)
-                        outputStream.Write(mipMapBytes[mipMap], faceOffset, mipMapByteCount);
-                    else
-                        throw new InvalidOperationException($"Mipmap file {mipMap} doesn't contain expected face data at offset {faceOffset}");
-                }
-                else
-                {
-                    // For the small mipmaps in the main file
-                    var faceOffset = isCubeMap ? (cubeFace * mipMapByteCount) : 0;
-                    if (postHeaderDataOffset + mipMapByteCount <= headerInfo.PostHeaderData.Length)
-                    {
-                        outputStream.Write(headerInfo.PostHeaderData, postHeaderDataOffset, mipMapByteCount);
-                        postHeaderDataOffset += mipMapByteCount;
-                    }
-                    else
-                        throw new InvalidOperationException($"Post-header data doesn't contain expected mipmap data at offset {postHeaderDataOffset}");
-                }
-            }
-        }
-
-        outputStream.Write(CRYENGINE_END_MARKER, 0, CRYENGINE_END_MARKER_SIZE);
-    }
-
-    private static (int Width, int Height)[] GetMipMapSizes(DdsHeader header)
+    public (int Width, int Height)[] GetMipMapSizes(DdsHeader header)
     {
         var mipMapSizes = new (int Width, int Height)[header.MipMapCount];
 
@@ -355,5 +215,164 @@ public class DDSFileCombiner
             offset += headerInfo.PostHeaderData.Length;
 
         return offset;
+    }
+}
+
+/// <summary>Combines split DDS files back into a single file, handling CryEngine-specific formatting</summary>
+public class DDSFileCombiner
+{
+    private readonly IFileSystem _fileSystem;
+    private readonly DdsCombiner _combiner;
+
+    public DDSFileCombiner(IFileSystem fileSystem)
+    {
+        _fileSystem = fileSystem;
+        _combiner = new DdsCombiner(fileSystem);
+    }
+
+    /// <summary>
+    /// Combines split DDS files into a single file
+    /// </summary>
+    /// <param name="baseFileName">Path to the header file</param>
+    /// <param name="useSafeName">If true, adds an identifier to the output filename</param>
+    /// <param name="combinedFileNameIdentifier">Identifier to add to the output filename when useSafeName is true</param>
+    /// <returns>Path to the combined file</returns>
+    public string Combine(string baseFileName, bool useSafeName = false, string combinedFileNameIdentifier = "combined")
+    {
+        ArgumentNullException.ThrowIfNull(baseFileName);
+
+        var (directory, fileNameWithoutExtension) = PrepareFileInfo(baseFileName);
+        var fileSet = _combiner.FindMatchingFiles(directory, fileNameWithoutExtension);
+
+        if (fileSet.IsAlreadyCombined)
+        {
+            Console.WriteLine($"File {fileSet.HeaderFile} is already a valid DDS file. Skipping combining.");
+            return fileSet.HeaderFile;
+        }
+
+        using var headerStream = _fileSystem.OpenRead(fileSet.HeaderFile);
+        var headerInfo = HeaderInfo.Deserialize(headerStream);
+        var outputPath = CreateOutputPath(directory, fileNameWithoutExtension, useSafeName, combinedFileNameIdentifier);
+
+        // Combine main texture files
+        CombineFiles(outputPath, headerInfo, fileSet.HeaderFile, fileSet.MipmapFiles);
+
+        // If there's a gloss texture, combine those files too
+        if (fileSet.GlossHeaderFile != null && fileSet.GlossMipmapFiles != null)
+        {
+            var glossOutputPath = Path.Combine(
+                Path.GetDirectoryName(outputPath)!,
+                Path.GetFileNameWithoutExtension(outputPath) + "_gloss" + Path.GetExtension(outputPath));
+            using var fs = _fileSystem.OpenRead(fileSet.GlossHeaderFile);
+            var glossHeaderInfo = HeaderInfo.Deserialize(fs);
+            CombineFiles(glossOutputPath, glossHeaderInfo, fileSet.GlossHeaderFile, fileSet.GlossMipmapFiles);
+        }
+
+        return outputPath;
+    }
+
+    private static (string directory, string fileNameWithoutExtension) PrepareFileInfo(string baseFileName)
+    {
+        string? directory = Path.GetDirectoryName(baseFileName);
+        if (directory is null)
+            throw new DirectoryNotFoundException("Could not determine directory from base file name");
+
+        // Remove both extensions (e.g., "file.dds.1" -> "file")
+        string fileNameWithoutExtension =
+            Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(baseFileName));
+        return (directory, fileNameWithoutExtension);
+    }
+
+    private static string CreateOutputPath(string directory, string fileNameWithoutExtension,
+        bool useSafeName, string combinedFileNameIdentifier)
+    {
+        var suffix = useSafeName ? $".{combinedFileNameIdentifier}" : null;
+        return Path.Combine(directory, $"{fileNameWithoutExtension}{suffix}.{DDS_EXTENSION}");
+    }
+
+    private void CombineFiles(string outputPath, HeaderInfo headerInfo, string headerFile, List<string> mipmapFiles)
+    {
+        // If the headerfile is .dds, rename it to .dds.0 to prevent loss of data.  For
+        // game files that already have a .dds.0, that is the header file and it's safe to write
+        // to .dds.
+        string effectiveHeaderFile = headerFile;
+        if (Path.GetExtension(headerFile) == $".{DDS_EXTENSION}")
+        {
+            var newHeaderPath = Path.ChangeExtension(headerFile, $".{DDS_EXTENSION}.0");
+            if (!_fileSystem.FileExists(newHeaderPath))
+            {
+                try
+                {
+                    // Use FileShare.ReadWrite | FileShare.Delete to allow maximum compatibility
+                    using var stream = new FileStream(headerFile, FileMode.Open, FileAccess.Read,
+                        FileShare.ReadWrite | FileShare.Delete);
+                    using var destStream =
+                        new FileStream(newHeaderPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                    stream.CopyTo(destStream);
+                }
+                catch (IOException)
+                {
+                    // If we can't open with FileStream, try a direct file copy
+                    File.Copy(headerFile, newHeaderPath, overwrite: false);
+                }
+            }
+
+            effectiveHeaderFile = newHeaderPath;
+        }
+
+        int totalHeaderSize = DDS_HEADER_SIZE + (headerInfo.DXT10Header != null ? DXT10_HEADER_SIZE : 0);
+
+        // Use FileShare.Read to allow other processes to read while we're writing
+        using var outputStream = _fileSystem.OpenWrite(outputPath);
+
+        headerInfo.Serialize(outputStream);
+
+        var isCubeMap = (headerInfo.Header.Caps2 & DDSCaps2.CUBEMAP) != 0;
+        var faces = isCubeMap ? 6 : 1;
+
+        var mipMapSizes = _combiner.GetMipMapSizes(headerInfo.Header);
+        var mipMapBytes = mipmapFiles
+            .OrderDescending()
+            .Select(_fileSystem.ReadAllBytes)
+            .ToArray();
+
+        var postHeaderDataOffset = 0;
+
+        // For cubemaps, we need to organize the data by face first
+        for (var cubeFace = 0; cubeFace < faces; cubeFace++)
+        {
+            for (var mipMap = 0; mipMap < headerInfo.Header.MipMapCount; mipMap++)
+            {
+                var mipMapSize = mipMapSizes[mipMap];
+                var mipMapByteCount = _combiner.CalculateMipSize(mipMapSize.Width, mipMapSize.Height, headerInfo);
+
+                if (mipMap < mipMapBytes.Length)
+                {
+                    // For cubemaps, each mipmap file should contain all faces
+                    // So we read from the appropriate face offset within each mipmap file
+                    var faceOffset = isCubeMap ? (cubeFace * mipMapByteCount) : 0;
+                    if (faceOffset + mipMapByteCount <= mipMapBytes[mipMap].Length)
+                        outputStream.Write(mipMapBytes[mipMap], faceOffset, mipMapByteCount);
+                    else
+                        throw new InvalidOperationException(
+                            $"Mipmap file {mipMap} doesn't contain expected face data at offset {faceOffset}");
+                }
+                else
+                {
+                    // For the small mipmaps in the main file
+                    var faceOffset = isCubeMap ? (cubeFace * mipMapByteCount) : 0;
+                    if (postHeaderDataOffset + mipMapByteCount <= headerInfo.PostHeaderData.Length)
+                    {
+                        outputStream.Write(headerInfo.PostHeaderData, postHeaderDataOffset, mipMapByteCount);
+                        postHeaderDataOffset += mipMapByteCount;
+                    }
+                    else
+                        throw new InvalidOperationException(
+                            $"Post-header data doesn't contain expected mipmap data at offset {postHeaderDataOffset}");
+                }
+            }
+        }
+
+        outputStream.Write(CRYENGINE_END_MARKER, 0, CRYENGINE_END_MARKER_SIZE);
     }
 }
