@@ -1,18 +1,7 @@
-﻿using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using DDSUnsplitter.Library.Models;
+﻿using DDSUnsplitter.Library.Models;
 using static DDSUnsplitter.Library.Models.DdsConstants;
 
 namespace DDSUnsplitter.Library;
-
-public class DdsFileSet
-{
-    public string HeaderFile { get; set; } = string.Empty;
-    public List<string> MipmapFiles { get; set; } = new();
-    public string? GlossHeaderFile { get; set; }
-    public List<string>? GlossMipmapFiles { get; set; }
-    public bool IsAlreadyCombined { get; set; }
-}
 
 /// <summary>Combines split DDS files back into a single file, handling CryEngine-specific formatting</summary>
 public class DDSFileCombiner
