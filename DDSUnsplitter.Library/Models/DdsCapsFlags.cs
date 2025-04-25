@@ -3,7 +3,7 @@
 using System;
 
 [Flags]
-public enum DDSCaps
+public enum DDSCaps : uint
 {
     COMPLEX = 0x8,
     TEXTURE = 0x1000,
@@ -12,7 +12,7 @@ public enum DDSCaps
 }
 
 [Flags]
-public enum DDSCaps2
+public enum DDSCaps2: uint
 {
     CUBEMAP = 0x200,
     CUBEMAP_POSITIVEX = 0x400,
@@ -28,13 +28,13 @@ public enum DDSCaps2
 }
 
 [Flags]
-public enum DDSCaps3
+public enum DDSCaps3: uint
 {
     // Reserved - no flags defined
 }
 
 [Flags]
-public enum DDSCaps4
+public enum DDSCaps4: uint
 {
     // Reserved - no flags defined
 }
