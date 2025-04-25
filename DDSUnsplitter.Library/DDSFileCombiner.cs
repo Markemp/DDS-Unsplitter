@@ -254,6 +254,8 @@ public class DDSFileCombiner
         var headerInfo = HeaderInfo.Deserialize(headerStream);
         var outputPath = CreateOutputPath(directory, fileNameWithoutExtension, useSafeName, combinedFileNameIdentifier);
 
+        
+        EnsureSafeExtensions(fileSet.HeaderFile);
         // Combine main texture files
         CombineFiles(outputPath, headerInfo, fileSet.HeaderFile, fileSet.MipmapFiles);
 
@@ -265,6 +267,9 @@ public class DDSFileCombiner
                 Path.GetFileNameWithoutExtension(outputPath) + "_gloss" + Path.GetExtension(outputPath));
             using var fs = _fileSystem.OpenRead(fileSet.GlossHeaderFile);
             var glossHeaderInfo = HeaderInfo.Deserialize(fs);
+            
+            EnsureSafeExtensions(fileSet.GlossHeaderFile);
+
             CombineFiles(glossOutputPath, glossHeaderInfo, fileSet.GlossHeaderFile, fileSet.GlossMipmapFiles);
         }
 
@@ -292,34 +297,6 @@ public class DDSFileCombiner
 
     private void CombineFiles(string outputPath, HeaderInfo headerInfo, string headerFile, List<string> mipmapFiles)
     {
-        // If the headerfile is .dds, rename it to .dds.0 to prevent loss of data.  For
-        // game files that already have a .dds.0, that is the header file and it's safe to write
-        // to .dds.
-        string effectiveHeaderFile = headerFile;
-        if (Path.GetExtension(headerFile) == $".{DDS_EXTENSION}")
-        {
-            var newHeaderPath = Path.ChangeExtension(headerFile, $".{DDS_EXTENSION}.0");
-            if (!_fileSystem.FileExists(newHeaderPath))
-            {
-                try
-                {
-                    // Use FileShare.ReadWrite | FileShare.Delete to allow maximum compatibility
-                    using var stream = new FileStream(headerFile, FileMode.Open, FileAccess.Read,
-                        FileShare.ReadWrite | FileShare.Delete);
-                    using var destStream =
-                        new FileStream(newHeaderPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                    stream.CopyTo(destStream);
-                }
-                catch (IOException)
-                {
-                    // If we can't open with FileStream, try a direct file copy
-                    File.Copy(headerFile, newHeaderPath, overwrite: false);
-                }
-            }
-
-            effectiveHeaderFile = newHeaderPath;
-        }
-
         int totalHeaderSize = DDS_HEADER_SIZE + (headerInfo.DXT10Header != null ? DXT10_HEADER_SIZE : 0);
 
         // Use FileShare.Read to allow other processes to read while we're writing
@@ -374,5 +351,33 @@ public class DDSFileCombiner
         }
 
         outputStream.Write(CRYENGINE_END_MARKER, 0, CRYENGINE_END_MARKER_SIZE);
+    }
+
+    private void EnsureSafeExtensions(string headerFile)
+    {
+        // If the headerfile is .dds, rename it to .dds.0 to prevent loss of data.  For
+        // game files that already have a .dds.0, that is the header file and it's safe to write
+        // to .dds.
+        if (Path.GetExtension(headerFile) == $".{DDS_EXTENSION}")
+        {
+            var newHeaderPath = Path.ChangeExtension(headerFile, $".{DDS_EXTENSION}.0");
+            if (!_fileSystem.FileExists(newHeaderPath))
+            {
+                try
+                {
+                    // Use FileShare.ReadWrite | FileShare.Delete to allow maximum compatibility
+                    using var stream = new FileStream(headerFile, FileMode.Open, FileAccess.Read,
+                        FileShare.ReadWrite | FileShare.Delete);
+                    using var destStream =
+                        new FileStream(newHeaderPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                    stream.CopyTo(destStream);
+                }
+                catch (IOException)
+                {
+                    // If we can't open with FileStream, try a direct file copy
+                    File.Copy(headerFile, newHeaderPath, overwrite: false);
+                }
+            }
+        }
     }
 }
