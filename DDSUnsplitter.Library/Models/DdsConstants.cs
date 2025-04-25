@@ -5,6 +5,9 @@
 /// </summary>
 public static class DdsConstants
 {
+    public static ReadOnlySpan<byte> DdsMagic => "DDS "u8;
+    public static ReadOnlySpan<byte> Dx10Magic => "DX10"u8;
+    
     // File extensions and identifiers
     public const string DDS_EXTENSION = "dds";
     public const string DDS_MAGIC = "DDS ";

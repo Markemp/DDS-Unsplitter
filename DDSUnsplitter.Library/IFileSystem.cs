@@ -13,10 +13,10 @@ public interface IFileSystem
 #pragma warning disable RS0030
 public class RealFileSystem : IFileSystem
 {
-    public Stream OpenRead(string path) => File.OpenRead(path);
+    public Stream OpenRead(string path) => new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
     public bool DirectoryExists(string path) => Directory.Exists(path);
     public bool FileExists(string path) => File.Exists(path);
-    public Stream OpenWrite(string path) => File.OpenWrite(path);
+    public Stream OpenWrite(string path) => new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
     public IEnumerable<string> EnumerateFiles(string path, string searchPattern) => Directory.EnumerateFiles(path, searchPattern);
     public byte[] ReadAllBytes(string path) => File.ReadAllBytes(path);
 }

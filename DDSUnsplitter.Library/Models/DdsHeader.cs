@@ -1,15 +1,53 @@
-﻿namespace DDSUnsplitter.Library.Models;
+﻿using System.Runtime.InteropServices;
 
-using static DDSUnsplitter.Library.Models.DdsConstants;
+namespace DDSUnsplitter.Library.Models;
 
 public class HeaderInfo
 {
-    public DdsHeader Header { get; set; }
-    public DdsHeaderDXT10? DXT10Header { get; set; }
-    public byte[]? PostHeaderData { get; set; }
+    public DdsHeader Header { get; private init; }
+    public DdsHeaderDXT10? DXT10Header { get; private init; }
+    public byte[]? PostHeaderData { get; private init; }
+    
+    public static HeaderInfo Deserialize(Stream stream)
+    {
+        if (!stream.CanSeek) throw new ArgumentException("Stream must support seeking", nameof(stream));
+
+        var before = stream.Position;
+        //if we don't start with the magic, roll back to the start
+        var magic = stream.ReadStruct<uint>();
+        if (magic != BitConverter.ToUInt32(DdsConstants.DdsMagic))
+            stream.Position = before;
+
+        var header = stream.ReadStruct<DdsHeader>();
+
+        DdsHeaderDXT10? dx10Header = null;
+        if (header.PixelFormat.FourCC == CompressionMethods.DX10)
+            dx10Header = stream.ReadStruct<DdsHeaderDXT10>();
+
+        // if not at EOF, read the remaining to a byte array and store in HeaderInfo
+
+        var remainingBytes = (int)(stream.Length - stream.Position);
+        var postHeaderData = remainingBytes > 0 ? stream.ReadArray<byte>(remainingBytes) : null;
+        
+        return new HeaderInfo
+        {
+            Header = header,
+            DXT10Header = dx10Header,
+            PostHeaderData = postHeaderData
+        };
+    }
+
+    public void Serialize(Stream stream)
+    {
+        stream.Write(DdsConstants.DdsMagic);
+        stream.WriteStruct(Header);
+        if (DXT10Header is {} dx10Header)
+            stream.WriteStruct(dx10Header);
+    }
 }
 
-public sealed record DdsHeader
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct DdsHeader
 {
     public int Size { get; init; }
     public int Flags { get; init; }
@@ -18,150 +56,27 @@ public sealed record DdsHeader
     public int PitchOrLinearSize { get; init; }
     public int Depth { get; init; }
     public int MipMapCount { get; init; }
-    public int[] Reserved1 { get; init; }
+    public DdsReserved1 Reserved1 { get; init; }
     public DdsPixelFormat PixelFormat { get; init; }
     public DDSCaps Caps { get; init; }
     public DDSCaps2 Caps2 { get; init; }
     public DDSCaps3 Caps3 { get; init; }
     public DDSCaps4 Caps4 { get; init; }
     public int Reserved2 { get; init; }
+}
 
-    public byte[] Serialize()
-    {
-        using var stream = new MemoryStream();
-        using var writer = new BinaryWriter(stream);
-
-        writer.Write(DDS_MAGIC.ToCharArray());
-        writer.Write(Size);
-        writer.Write(Flags);
-        writer.Write(Height);
-        writer.Write(Width);
-        writer.Write(PitchOrLinearSize);
-        writer.Write(Depth);
-        writer.Write(MipMapCount);
-        WriteReserved1(writer);
-        WritePixelFormat(writer);
-        writer.Write((int)Caps);
-        writer.Write((int)Caps2);
-        writer.Write((int)Caps3);
-        writer.Write((int)Caps4);
-        writer.Write(Reserved2);
-
-        return stream.ToArray();
-    }
-
-    public static HeaderInfo Deserialize(byte[] fileContent)
-    {
-        using var stream = new MemoryStream(fileContent);
-        using var reader = new BinaryReader(stream);
-
-        ValidateHeaderContent(fileContent);
-
-        SkipMagicNumberIfPresent(reader);
-        var header = new DdsHeader
-        {
-            Size = reader.ReadInt32(),
-            Flags = reader.ReadInt32(),
-            Height = reader.ReadInt32(),
-            Width = reader.ReadInt32(),
-            PitchOrLinearSize = reader.ReadInt32(),
-            Depth = reader.ReadInt32(),
-            MipMapCount = reader.ReadInt32(),
-            Reserved1 = ReadReserved1(reader),
-            PixelFormat = ReadPixelFormat(reader),
-            Caps = (DDSCaps)reader.ReadInt32(),
-            Caps2 = (DDSCaps2)reader.ReadInt32(),
-            Caps3 = (DDSCaps3)reader.ReadInt32(),
-            Caps4 = (DDSCaps4)reader.ReadInt32(),
-            Reserved2 = reader.ReadInt32()
-        };
-
-        DdsHeaderDXT10? dxt10Header = null;
-        if (IsDXT10Format(header) && stream.Position + DXT10_HEADER_SIZE <= stream.Length)
-            dxt10Header = ReadDXT10Header(reader);
-
-        // if not at EOF, read the remaining to a byte array and store in HeaderInfo
-        int remainingBytes = (int)(stream.Length - stream.Position);
-        byte[] postHeaderData = new byte[remainingBytes];
-        stream.ReadExactly(postHeaderData, 0, remainingBytes);
-
-        return new HeaderInfo()
-        {
-            Header = header,
-            DXT10Header = dxt10Header,
-            PostHeaderData = postHeaderData
-        };
-    }
-
-    private void WriteReserved1(BinaryWriter writer)
-    {
-        foreach (var value in Reserved1)
-        {
-            writer.Write(value);
-        }
-    }
-
-    private static int[] ReadReserved1(BinaryReader reader) =>
-        Enumerable.Range(0, RESERVED1_SIZE)
-            .Select(_ => reader.ReadInt32())
-            .ToArray();
-
-    private static void SkipMagicNumberIfPresent(BinaryReader reader)
-    {
-        long originalPosition = reader.BaseStream.Position;
-        string magic = new string(reader.ReadChars(DDS_MAGIC.Length));
-
-        if (magic != DDS_MAGIC)
-            reader.BaseStream.Position = originalPosition;
-    }
-
-    private static bool IsDXT10Format(DdsHeader header) => new string(header.PixelFormat.FourCC) == "DX10";
-
-    private void WritePixelFormat(BinaryWriter writer)
-    {
-        writer.Write(PixelFormat.Size);
-        writer.Write((uint)PixelFormat.Flags);
-        writer.Write(PixelFormat.FourCC);
-        writer.Write(PixelFormat.RGBBitCount);
-        writer.Write(PixelFormat.RBitMask);
-        writer.Write(PixelFormat.GBitMask);
-        writer.Write(PixelFormat.BBitMask);
-        writer.Write(PixelFormat.ABitMask);
-    }
-
-    private static void ValidateHeaderContent(byte[] headerContent)
-    {
-        if (headerContent is null)
-            throw new ArgumentNullException(nameof(headerContent));
-
-        if (headerContent.Length < DDS_HEADER_SIZE)
-        {
-            throw new ArgumentException(
-                $"Header content must be at least {DDS_HEADER_SIZE} bytes long",
-                nameof(headerContent));
-        }
-    }
-
-    private static DdsHeaderDXT10 ReadDXT10Header(BinaryReader reader) =>
-        new()
-        {
-            DxgiFormat = (DxgiFormat)reader.ReadUInt32(),
-            ResourceDimension = (D3D10ResourceDimension)reader.ReadUInt32(),
-            MiscFlag = reader.ReadUInt32(),
-            ArraySize = reader.ReadUInt32(),
-            MiscFlags2 = (AlphaMode)reader.ReadUInt32()
-        };
-
-    private static DdsPixelFormat ReadPixelFormat(BinaryReader reader) =>
-        new()
-        {
-            Size = reader.ReadUInt32(),
-            Flags = (DDSPixelFormatFlags)reader.ReadUInt32(),
-            FourCC = reader.ReadChars(4),
-            RGBBitCount = reader.ReadInt32(),
-            RBitMask = reader.ReadUInt32(),
-            GBitMask = reader.ReadUInt32(),
-            BBitMask = reader.ReadUInt32(),
-            ABitMask = reader.ReadUInt32()
-        };
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct DdsReserved1
+{
+    public readonly uint Reserved01;
+    public readonly uint Reserved02;
+    public readonly uint Reserved03;
+    public readonly uint Reserved04;
+    public readonly uint Reserved05;
+    public readonly uint Reserved06;
+    public readonly uint Reserved07;
+    public readonly uint Reserved08;
+    public readonly uint Reserved09;
+    public readonly uint Reserved10;
+    public readonly uint Reserved11;
 }

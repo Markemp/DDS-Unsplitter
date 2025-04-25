@@ -1,4 +1,6 @@
-﻿using DDSUnsplitter.Library.Models;
+﻿using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using DDSUnsplitter.Library.Models;
 using static DDSUnsplitter.Library.Models.DdsConstants;
 
 namespace DDSUnsplitter.Library;
@@ -42,7 +44,8 @@ public class DDSFileCombiner
             return fileSet.HeaderFile;
         }
 
-        var headerInfo = DdsHeader.Deserialize(_fileSystem.ReadAllBytes(fileSet.HeaderFile));
+        using var headerStream = _fileSystem.OpenRead(fileSet.HeaderFile);
+        var headerInfo = HeaderInfo.Deserialize(headerStream);
         var outputPath = CreateOutputPath(directory, fileNameWithoutExtension, useSafeName, combinedFileNameIdentifier);
 
         // Combine main texture files
@@ -54,7 +57,8 @@ public class DDSFileCombiner
             var glossOutputPath = Path.Combine(
                 Path.GetDirectoryName(outputPath)!,
                 Path.GetFileNameWithoutExtension(outputPath) + "_gloss" + Path.GetExtension(outputPath));
-            var glossHeaderInfo = DdsHeader.Deserialize(_fileSystem.ReadAllBytes(fileSet.GlossHeaderFile));
+            using var fs = _fileSystem.OpenRead(fileSet.GlossHeaderFile);
+            var glossHeaderInfo = HeaderInfo.Deserialize(fs);
             CombineFiles(glossOutputPath, glossHeaderInfo, fileSet.GlossHeaderFile, fileSet.GlossMipmapFiles);
         }
 
@@ -83,7 +87,8 @@ public class DDSFileCombiner
         var baseFile = allFiles.FirstOrDefault(f => f.EndsWith($".{DDS_EXTENSION}"));
         if (baseFile is not null)
         {
-            var headerInfo = DdsHeader.Deserialize(_fileSystem.ReadAllBytes(baseFile));
+            using var fs = _fileSystem.OpenRead(baseFile);
+            var headerInfo = HeaderInfo.Deserialize(fs);
             if (IsAlreadyValidDDSFile(headerInfo, _fileSystem.ReadAllBytes(baseFile).Length))
                 return new DdsFileSet { HeaderFile = baseFile, IsAlreadyCombined = true };
         }
@@ -165,12 +170,12 @@ public class DDSFileCombiner
         return offsets;
     }
 
-    public static int CalculateMipSize(int width, int height, HeaderInfo headerInfo)
+    private static int CalculateMipSize(int width, int height, HeaderInfo headerInfo)
     {
-        if (headerInfo.DXT10Header is not null)
-            return CalculateMipSizeDX10(width, height, headerInfo.DXT10Header.DxgiFormat);
-        else
-            return CalculateMipSizeLegacy(width, height, headerInfo.Header.PixelFormat);
+        if (headerInfo.DXT10Header is { } header)
+            return CalculateMipSizeDX10(width, height, header.DxgiFormat);
+        
+        return CalculateMipSizeLegacy(width, height, headerInfo.Header.PixelFormat);
     }
 
     private static int CalculateMipSizeDX10(int width, int height, DxgiFormat format)
@@ -226,18 +231,17 @@ public class DDSFileCombiner
         if ((pixelFormat.Flags & DDSPixelFormatFlags.FourCC) != 0)
         {
             // Only look at FourCC if the flag indicates we should
-            var fourCC = new string(pixelFormat.FourCC);
-            switch (fourCC)
+            switch (pixelFormat.FourCC)
             {
-                case "DXT1":
+                case CompressionMethods.DXT1:
                     return ((width + 3) / 4) * ((height + 3) / 4) * 8;
-                case "DXT3":
-                case "DXT5":
-                case "ATI2":
-                case "BC5_SNORM":
+                case CompressionMethods.DXT3:
+                case CompressionMethods.DXT5:
+                case CompressionMethods.ATI2:
+                case CompressionMethods.BC5S:
                     return ((width + 3) / 4) * ((height + 3) / 4) * 16;
                 default:
-                    throw new NotSupportedException($"FourCC format {fourCC} not supported");
+                    throw new NotSupportedException($"FourCC format {pixelFormat.FourCC} not supported");
             }
         }
         else
@@ -258,48 +262,37 @@ public class DDSFileCombiner
 
     private void CombineFiles(string outputPath, HeaderInfo headerInfo, string headerFile, List<string> mipmapFiles)
     {
-        // // If the headerfile is .dds, rename it to .dds.0 to prevent loss of data.  For
-        // // game files that already have a .dds.0, that is the header file and it's safe to write
-        // // to .dds.
-        // string effectiveHeaderFile = headerFile;
-        // if (Path.GetExtension(headerFile) == $".{DDS_EXTENSION}")
-        // {
-        //     var newHeaderPath = Path.ChangeExtension(headerFile, $".{DDS_EXTENSION}.0");
-        //     if (!_fileSystem.FileExists(newHeaderPath))
-        //     {
-        //         try
-        //         {
-        //             // Use FileShare.ReadWrite | FileShare.Delete to allow maximum compatibility
-        //             using var stream = new FileStream(headerFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        //             using var destStream = new FileStream(newHeaderPath, FileMode.Create, FileAccess.Write, FileShare.None);
-        //             stream.CopyTo(destStream);
-        //         }
-        //         catch (IOException)
-        //         {
-        //             // If we can't open with FileStream, try a direct file copy
-        //             File.Copy(headerFile, newHeaderPath, overwrite: false);
-        //         }
-        //     }
-        //     effectiveHeaderFile = newHeaderPath;
-        // }
+        // If the headerfile is .dds, rename it to .dds.0 to prevent loss of data.  For
+        // game files that already have a .dds.0, that is the header file and it's safe to write
+        // to .dds.
+        string effectiveHeaderFile = headerFile;
+        if (Path.GetExtension(headerFile) == $".{DDS_EXTENSION}")
+        {
+            var newHeaderPath = Path.ChangeExtension(headerFile, $".{DDS_EXTENSION}.0");
+            if (!_fileSystem.FileExists(newHeaderPath))
+            {
+                try
+                {
+                    // Use FileShare.ReadWrite | FileShare.Delete to allow maximum compatibility
+                    using var stream = new FileStream(headerFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var destStream = new FileStream(newHeaderPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                    stream.CopyTo(destStream);
+                }
+                catch (IOException)
+                {
+                    // If we can't open with FileStream, try a direct file copy
+                    File.Copy(headerFile, newHeaderPath, overwrite: false);
+                }
+            }
+            effectiveHeaderFile = newHeaderPath;
+        }
 
         int totalHeaderSize = DDS_HEADER_SIZE + (headerInfo.DXT10Header != null ? DXT10_HEADER_SIZE : 0);
 
         // Use FileShare.Read to allow other processes to read while we're writing
         using var outputStream = _fileSystem.OpenWrite(outputPath);
 
-        byte[] serializedHeader = headerInfo.Header.Serialize();
-        if (serializedHeader.Length >= DDS_HEADER_SIZE)
-        {
-            outputStream.Write(serializedHeader, 0, DDS_HEADER_SIZE);
-
-            if (headerInfo.DXT10Header is not null)
-            {
-                byte[] dxt10Header = headerInfo.DXT10Header.Serialize();
-                if (dxt10Header.Length >= DXT10_HEADER_SIZE)
-                    outputStream.Write(dxt10Header, 0, DXT10_HEADER_SIZE);
-            }
-        }
+        headerInfo.Serialize(outputStream);
 
         var isCubeMap = (headerInfo.Header.Caps2 & DDSCaps2.CUBEMAP) != 0;
         var faces = isCubeMap ? 6 : 1;
