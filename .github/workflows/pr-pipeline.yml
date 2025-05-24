@@ -1,4 +1,4 @@
-name: PR Pipeline
+name: CI/CD Pipeline
 
 on:
   pull_request:
@@ -26,3 +26,18 @@ jobs:
       
     - name: Test
       run: dotnet test --no-build --verbosity normal
+
+    # Publish to NuGet only on successful push to main
+    - name: Build Release for NuGet
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: dotnet build DDSUnsplitter.Library --configuration Release --no-restore
+
+    - name: Pack NuGet Package
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: dotnet pack DDSUnsplitter.Library --configuration Release --no-build --output ./nupkg
+
+    - name: Publish to NuGet
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}

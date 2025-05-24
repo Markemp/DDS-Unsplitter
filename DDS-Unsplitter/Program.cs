@@ -34,7 +34,7 @@ class Program
             }
 
             // Ensure we have a proper path by combining with current directory if no path provided
-            if (!Path.IsPathRooted(filename) && !filename.StartsWith("."))
+            if (!Path.IsPathRooted(filename) && !filename.StartsWith('.'))
                 filename = Path.Combine(".", filename);
 
             string combinedFile = DDSFileCombiner.Combine(filename, useSafeName);
