@@ -7,7 +7,7 @@
     
     <!-- NuGet Package Properties -->
     <PackageId>DDSUnsplitter</PackageId>
-    <PackageVersion>1.0.0</PackageVersion>
+    <PackageVersion>1.0.1</PackageVersion>
     <Title>DDS Unsplitter Library</Title>
     <Description>A .NET library for combining split DDS (DirectDraw Surface) texture files back into single files, with support for CryEngine-specific formatting, mipmaps, and cubemaps.</Description>
     <Company>Heffay Presents</Company>

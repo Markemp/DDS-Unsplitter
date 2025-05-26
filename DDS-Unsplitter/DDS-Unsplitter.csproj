@@ -8,9 +8,9 @@
     <Nullable>enable</Nullable>
     
     <!-- Version Information -->
-    <Version>1.1.0</Version>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <FileVersion>1.1.0.0</FileVersion>
+    <Version>1.1.1</Version>
+    <AssemblyVersion>1.1.1.0</AssemblyVersion>
+    <FileVersion>1.1.1.0</FileVersion>
     <Product>DDS-Unsplitter</Product>
     <Description>A utility for combining split DDS texture files</Description>
   </PropertyGroup>
