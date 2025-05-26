@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-and-test:
@@ -35,6 +36,26 @@ jobs:
     - name: Pack NuGet Package
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: dotnet pack DDSUnsplitter.Library --configuration Release --no-build --output ./nupkg
+
+    - name: Debug - Check file structure
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      shell: pwsh
+      run: |
+        Write-Host "Current working directory:"
+        Get-Location
+        Write-Host "`nContents of current directory:"
+        Get-ChildItem -Name
+        Write-Host "`nLooking for nupkg directory:"
+        if (Test-Path "./nupkg") {
+            Write-Host "nupkg directory exists"
+            Write-Host "Contents of nupkg directory:"
+            Get-ChildItem "./nupkg" -Name
+        } else {
+            Write-Host "nupkg directory does not exist"
+        }
+        Write-Host "`nSearching for .nupkg files recursively:"
+        Get-ChildItem -Recurse -Filter "*.nupkg" | ForEach-Object { Write-Host $_.FullName }
+
 
     - name: Publish to NuGet
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
