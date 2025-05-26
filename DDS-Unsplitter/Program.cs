@@ -22,7 +22,7 @@ class Program
             {
                 if (args[i] == "-s" || args[i] == "--safe")
                     useSafeName = true;
-                else if (!args[i].StartsWith("-"))
+                else if (!args[i].StartsWith('-'))
                     filename = args[i];
             }
 
