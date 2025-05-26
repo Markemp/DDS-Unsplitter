@@ -197,7 +197,6 @@ public class DDSFileCombinerTests
     {
         string baseFileName = Path.Combine(_tempDir, "gloss10_ddna.dds");
         string directory = Path.GetDirectoryName(baseFileName)!;
-        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(baseFileName);
 
         string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
 
@@ -222,7 +221,6 @@ public class DDSFileCombinerTests
     {
         string baseFileName = Path.Combine(_tempDir, "shovel_ddna.dds");
         string directory = Path.GetDirectoryName(baseFileName)!;
-        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(baseFileName);
 
         string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
 
@@ -247,7 +245,6 @@ public class DDSFileCombinerTests
     {
         string baseFileName = Path.Combine(_tempDir, "DSConceptChild01_sdf.dds");
         string directory = Path.GetDirectoryName(baseFileName)!;
-        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(baseFileName);
 
         string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
 
