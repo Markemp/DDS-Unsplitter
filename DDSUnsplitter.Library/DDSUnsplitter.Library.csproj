@@ -4,6 +4,35 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    
+    <!-- NuGet Package Properties -->
+    <PackageId>DDSUnsplitter</PackageId>
+    <PackageVersion>1.0.0</PackageVersion>
+    <Title>DDS Unsplitter Library</Title>
+    <Description>A .NET library for combining split DDS (DirectDraw Surface) texture files back into single files, with support for CryEngine-specific formatting, mipmaps, and cubemaps.</Description>
+    <Company>Heffay Presents</Company>
+    <Copyright>Copyright © 2025</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/markemp/DDS-Unsplitter</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/markemp/DDS-Unsplitter</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>dds;texture;graphics;cryengine;mipmap;cubemap;directdraw;surface</PackageTags>
+    <PackageReleaseNotes>Initial release with support for combining split DDS files including CryEngine format support.</PackageReleaseNotes>
+    <NoWarn>CS1591</NoWarn>
+    
+    <!-- Generate package on build -->
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    
+    <!-- Documentation -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <InternalsVisibleTo Include="DDSUnsplitter.Tests" />
+  </ItemGroup>
 
 </Project>

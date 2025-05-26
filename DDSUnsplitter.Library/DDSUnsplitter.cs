@@ -3,22 +3,44 @@ using static DDSUnsplitter.Library.Models.DdsConstants;
 
 namespace DDSUnsplitter.Library;
 
+/// <summary>
+/// Represents a set of DDS files that can be combined, including header files and mipmap files for both main texture and optional gloss texture
+/// </summary>
 public class DdsFileSet
 {
+    /// <summary>
+    /// Gets or sets the path to the main header file (typically .dds.0 or .dds)
+    /// </summary>
     public string HeaderFile { get; set; } = string.Empty;
-    public List<string> MipmapFiles { get; set; } = new();
+    
+    /// <summary>
+    /// Gets or sets the list of mipmap files for the main texture (typically .dds.1, .dds.2, etc.)
+    /// </summary>
+    public List<string> MipmapFiles { get; set; } = [];
+    
+    /// <summary>
+    /// Gets or sets the path to the gloss header file (typically .dds.a), if present
+    /// </summary>
     public string? GlossHeaderFile { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the list of mipmap files for the gloss texture (typically .dds.1a, .dds.2a, etc.), if present
+    /// </summary>
     public List<string>? GlossMipmapFiles { get; set; }
+    
+    /// <summary>
+    /// Gets or sets a value indicating whether the DDS file is already combined and doesn't need processing
+    /// </summary>
     public bool IsAlreadyCombined { get; set; }
 }
 
 /// <summary>Combines split DDS files back into a single file, handling CryEngine-specific formatting</summary>
-public class DDSFileCombiner
+public class DDSUnsplitter
 {
     /// <summary>
-    /// Combines split DDS files into a single file
+    /// Combines split DDS files into a single file.
     /// </summary>
-    /// <param name="baseFileName">Path to the header file</param>
+    /// <param name="baseFileName">Path to the DDS header file</param>
     /// <param name="useSafeName">If true, adds an identifier to the output filename</param>
     /// <param name="combinedFileNameIdentifier">Identifier to add to the output filename when useSafeName is true</param>
     /// <returns>Path to the combined file</returns>
@@ -65,7 +87,7 @@ public class DDSFileCombiner
         return (directory, fileNameWithoutExtension);
     }
 
-    public static DdsFileSet FindMatchingFiles(string directory, string fileNameWithoutExtension)
+    internal static DdsFileSet FindMatchingFiles(string directory, string fileNameWithoutExtension)
     {
         var result = new DdsFileSet();
         var allFiles = Directory.GetFiles(directory, $"{fileNameWithoutExtension}*")
@@ -94,7 +116,7 @@ public class DDSFileCombiner
 
         // Find gloss texture header and mipmaps
         var glossHeader = allFiles.FirstOrDefault(f => f.EndsWith($".{DDS_EXTENSION}.a"));
-        if (glossHeader != null)
+        if (glossHeader is not null)
         {
             result.GlossHeaderFile = glossHeader;
             // Get gloss mipmaps (files ending in .dds.1a, .dds.2a, etc.)
@@ -125,6 +147,11 @@ public class DDSFileCombiner
         return file.Length > offsets[^1];
     }
 
+    /// <summary>
+    /// Calculates the byte offsets for each mipmap level in the combined DDS file
+    /// </summary>
+    /// <param name="headerInfo">The header information containing DDS format details</param>
+    /// <returns>A list of byte offsets for each mipmap level</returns>
     public static List<long> CalculateMipmapOffsets(HeaderInfo headerInfo)
     {
         var header = headerInfo.Header;
@@ -161,6 +188,13 @@ public class DDSFileCombiner
         return offsets;
     }
 
+    /// <summary>
+    /// Calculates the size in bytes of a mipmap at the specified dimensions
+    /// </summary>
+    /// <param name="width">Width of the mipmap level</param>
+    /// <param name="height">Height of the mipmap level</param>
+    /// <param name="headerInfo">The header information containing DDS format details</param>
+    /// <returns>Size in bytes of the mipmap level</returns>
     public static int CalculateMipSize(int width, int height, HeaderInfo headerInfo)
     {
         if (headerInfo.DXT10Header is not null)
@@ -291,7 +325,7 @@ public class DDSFileCombiner
 
             if (headerInfo.DXT10Header is not null)
             {
-                byte[] dxt10Header = headerInfo.DXT10Header.Serialize();
+                byte[]? dxt10Header = headerInfo.DXT10Header?.Serialize();
                 if (dxt10Header is not null && dxt10Header.Length >= DXT10_HEADER_SIZE)
                     outputStream.Write(dxt10Header, 0, DXT10_HEADER_SIZE);
             }
@@ -337,7 +371,7 @@ public class DDSFileCombiner
                 {
                     // For the small mipmaps in the main file
                     var faceOffset = isCubeMap ? (cubeFace * mipMapByteCount) : 0;
-                    if (postHeaderDataOffset + mipMapByteCount <= headerInfo.PostHeaderData.Length)
+                    if (postHeaderDataOffset + mipMapByteCount <= headerInfo.PostHeaderData?.Length)
                     {
                         outputStream.Write(headerInfo.PostHeaderData, postHeaderDataOffset, mipMapByteCount);
                         postHeaderDataOffset += mipMapByteCount;

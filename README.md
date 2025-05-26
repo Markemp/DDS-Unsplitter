@@ -26,13 +26,19 @@ convert the file `gloss_ddna.dds`, you will end up with a `gloss_ddna.dds` file 
 
 ## Installation
 
-### Option 1: Download Release
+### Option 1: NuGet Package (Library)
+Install the library in your .NET project:
+```bash
+dotnet add package DDSUnsplitter
+```
+
+### Option 2: Download Release (Executable)
 1. Go to the [Releases](../../releases) page
 2. Download the latest release's executable
 3. Place it wherever you want to use it (no installation required).
 4. Add the executable to your system PATH for easy access.
 
-### Option 2: Build from Source
+### Option 3: Build from Source
 1. Clone the repository
 2. Open the solution in Visual Studio
 3. Build the solution
@@ -40,22 +46,24 @@ convert the file `gloss_ddna.dds`, you will end up with a `gloss_ddna.dds` file 
 
 ## Usage
 
+### Command Line Tool
+
 Basic usage:
 ```bash
 DDS-Unsplitter.exe <filename> [options]
 ```
 
-### Parameters
+#### Parameters
 - `filename`: The base name of the split DDS files to combine. Can be:
   - Full path: `C:\textures\file.dds`
   - Relative path: `.\file.dds`
   - Just filename: `file.dds` (will use current directory)
   - Extension is optional
 
-### Options
+#### Options
 - `-s, --safe`: Prevents overwriting original files by adding '.combined' before the extension
 
-### Examples
+#### Examples
 ```bash
 # Basic usage
 DDS-Unsplitter.exe texture.dds
@@ -70,7 +78,34 @@ DDS-Unsplitter.exe texture -s
 DDS-Unsplitter.exe C:\game\textures\texture.dds
 ```
 
-### Note
+### Library Usage
+
+When using the NuGet package in your .NET projects:
+
+```csharp
+using DDSUnsplitter.Library;
+
+// Combine split DDS files
+string combinedFilePath = DDSFileCombiner.Combine("path/to/texture.dds");
+
+// Use safe mode to prevent overwriting originals
+string safeCombinedPath = DDSFileCombiner.Combine("path/to/texture.dds", useSafeName: true);
+
+// Custom identifier for safe mode
+string customCombinedPath = DDSFileCombiner.Combine(
+    "path/to/texture.dds", 
+    useSafeName: true, 
+    combinedFileNameIdentifier: "merged"
+);
+```
+
+#### API Reference
+
+- `DDSFileCombiner.Combine(string baseFileName, bool useSafeName = false, string combinedFileNameIdentifier = "combined")`: Main method to combine split DDS files
+- `DDSFileCombiner.CalculateMipmapOffsets(HeaderInfo headerInfo)`: Calculate byte offsets for each mipmap level
+- `DDSFileCombiner.CalculateMipSize(int width, int height, HeaderInfo headerInfo)`: Calculate size in bytes of a mipmap at specified dimensions
+
+### Notes
 - Split files should be in the same directory
 - Files should be numbered sequentially (.0, .1, .2, etc.)
 - By default, it will overwrite the .dds file with the combined version

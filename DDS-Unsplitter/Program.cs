@@ -1,6 +1,4 @@
-﻿using DDSUnsplitter.Library;
-
-namespace DDSUnsplitter;
+﻿namespace DDSUnsplitter;
 
 class Program
 {
@@ -22,7 +20,7 @@ class Program
             {
                 if (args[i] == "-s" || args[i] == "--safe")
                     useSafeName = true;
-                else if (!args[i].StartsWith("-"))
+                else if (!args[i].StartsWith('-'))
                     filename = args[i];
             }
 
@@ -34,10 +32,10 @@ class Program
             }
 
             // Ensure we have a proper path by combining with current directory if no path provided
-            if (!Path.IsPathRooted(filename) && !filename.StartsWith("."))
+            if (!Path.IsPathRooted(filename) && !filename.StartsWith('.'))
                 filename = Path.Combine(".", filename);
 
-            string combinedFile = DDSFileCombiner.Combine(filename, useSafeName);
+            string combinedFile = Library.DDSUnsplitter.Combine(filename, useSafeName);
             Console.WriteLine($"Combined file: {combinedFile}");
         }
         catch (Exception ex)
