@@ -12,7 +12,8 @@ for working with CryEngine textures where a single texture might be split into m
 For DDNA files with the gloss channel in the alpha layer, the unsplitter will take the texture and
 create 2 separate textures: one with the normal map and a second with the gloss details.  The gloss
 texture will have `_gloss` appended to the file name, prior to the extension.  For example, if you
-convert the file `gloss_ddna.dds`, you will end up with a `gloss_ddna.dds` file with the normal data.
+convert the file `texture_ddna.dds`, you will end up with a `texture_ddna.dds` file with the normal data 
+and a `texture_ddna_gloss.dds` file.
 
 
 ### Features
@@ -55,7 +56,7 @@ DDS-Unsplitter.exe <filename> [options]
 
 #### Parameters
 - `filename`: The base name of the split DDS files to combine. Can be:
-  - Full path: `C:\textures\file.dds`
+  - Full path: `D:\depot\textures\file.dds`
   - Relative path: `.\file.dds`
   - Just filename: `file.dds` (will use current directory)
   - Extension is optional
@@ -86,13 +87,13 @@ When using the NuGet package in your .NET projects:
 using DDSUnsplitter.Library;
 
 // Combine split DDS files
-string combinedFilePath = DDSFileCombiner.Combine("path/to/texture.dds");
+string combinedFilePath = DDSUnsplitter.Combine("path/to/texture.dds");
 
 // Use safe mode to prevent overwriting originals
-string safeCombinedPath = DDSFileCombiner.Combine("path/to/texture.dds", useSafeName: true);
+string safeCombinedPath = DDSUnsplitter.Combine("path/to/texture.dds", useSafeName: true);
 
 // Custom identifier for safe mode
-string customCombinedPath = DDSFileCombiner.Combine(
+string customCombinedPath = DDSUnsplitter.Combine(
     "path/to/texture.dds", 
     useSafeName: true, 
     combinedFileNameIdentifier: "merged"
@@ -101,14 +102,12 @@ string customCombinedPath = DDSFileCombiner.Combine(
 
 #### API Reference
 
-- `DDSFileCombiner.Combine(string baseFileName, bool useSafeName = false, string combinedFileNameIdentifier = "combined")`: Main method to combine split DDS files
-- `DDSFileCombiner.CalculateMipmapOffsets(HeaderInfo headerInfo)`: Calculate byte offsets for each mipmap level
-- `DDSFileCombiner.CalculateMipSize(int width, int height, HeaderInfo headerInfo)`: Calculate size in bytes of a mipmap at specified dimensions
+- `DDSUnsplitter.Combine(string baseFileName, bool useSafeName = false, string combinedFileNameIdentifier = "combined")`: Main method to combine split DDS files
 
 ### Notes
 - Split files should be in the same directory
 - Files should be numbered sequentially (.0, .1, .2, etc.)
-- By default, it will overwrite the .dds file with the combined version
+- By default, it will overwrite the .dds file with the combined version and save the original file with a .0 extension
 - If a file has already been combined, it will be skipped
 
 ## File Format Support
@@ -120,11 +119,11 @@ The utility handles several DDS format variants:
 
 ## Contributing
 
-Interested in contributing? Please read our [Contributing Guidelines](CONTRIBUTING.md).
+Interested in contributing? Please read our [Contributing Guidelines](https://github.com/Markemp/DDS-Unsplitter/blob/main/CONTRIBUTING.md).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/Markemp/DDS-Unsplitter/blob/main/LICENSE) file for details.
 
 ## Acknowledgments
 

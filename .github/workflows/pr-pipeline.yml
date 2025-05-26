@@ -41,11 +41,11 @@ jobs:
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       shell: pwsh
       run: |
-        Get-ChildItem -Path "./*.nupkg" | ForEach-Object {
+        Get-ChildItem -Recurse -Path "./**/*.nupkg" | ForEach-Object {
           Write-Host "Publishing package: $($_.Name)"
           dotnet nuget push $_.FullName --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
         }
-        Get-ChildItem -Path "./*.snupkg" | ForEach-Object {
+        Get-ChildItem -Recurse -Path "./**/*.snupkg" | ForEach-Object {
           Write-Host "Publishing symbols: $($_.Name)"
           dotnet nuget push $_.FullName --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
         }
