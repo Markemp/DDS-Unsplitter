@@ -1,6 +1,6 @@
 ﻿namespace DDSUnsplitter.Library.Models;
 
-using static DDSUnsplitter.Library.Models.DdsConstants;
+using static global::DDSUnsplitter.Library.Models.DdsConstants;
 
 public class HeaderInfo
 {

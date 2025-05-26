@@ -52,7 +52,7 @@ public class DDSFileCombinerTests
     {
         string baseFileName = Path.Combine(_tempDir, "defaultnouvs.dds");
         
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
+        string combinedFileName = Library.DDSUnsplitter.Combine(baseFileName, true);
 
         FileInfo fileInfo = new(combinedFileName);
         Assert.That(File.Exists(combinedFileName), "Combined file was not created");
@@ -69,7 +69,7 @@ public class DDSFileCombinerTests
     {
         string baseFileName = Path.Combine(_tempDir, "defaultnouvs");
 
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+        string combinedFileName = Library.DDSUnsplitter.Combine(baseFileName, false);
 
         FileInfo fileInfo = new(combinedFileName);
         Assert.That(File.Exists(combinedFileName), "Combined file was not created");
@@ -86,7 +86,7 @@ public class DDSFileCombinerTests
     {
         string baseFileName = Path.Combine(_tempDir, "flat_normal_ddn.dds.0");
         
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+        string combinedFileName = Library.DDSUnsplitter.Combine(baseFileName, false);
 
         FileInfo fileInfo = new(combinedFileName);
         Assert.That(File.Exists(combinedFileName), "Combined file was not created");
@@ -102,7 +102,7 @@ public class DDSFileCombinerTests
     {
         string baseFileName = Path.Combine(_tempDir, "flat_normal_ddn");
 
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+        string combinedFileName = Library.DDSUnsplitter.Combine(baseFileName, false);
 
         FileInfo fileInfo = new(combinedFileName);
         Assert.That(File.Exists(combinedFileName), "Combined file was not created");
@@ -119,7 +119,7 @@ public class DDSFileCombinerTests
     {
         string baseFileName = Path.Combine(_tempDir, "flat_normal_ddn.dds");
 
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+        string combinedFileName = Library.DDSUnsplitter.Combine(baseFileName, false);
 
         FileInfo fileInfo = new(combinedFileName);
         Assert.That(File.Exists(combinedFileName), "Combined file was not created");
@@ -136,7 +136,7 @@ public class DDSFileCombinerTests
     {
         string baseFileName = Path.Combine(_tempDir, "environmentprobeafternoon_cm.dds");
 
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+        string combinedFileName = Library.DDSUnsplitter.Combine(baseFileName, false);
 
         FileInfo fileInfo = new(combinedFileName);
         Assert.That(File.Exists(combinedFileName), "Combined file was not created");
@@ -151,7 +151,7 @@ public class DDSFileCombinerTests
     public void FindMatchingFiles_NoExtension_GlossFilesReturnsAllFiles()
     {
         string baseFileName = "gloss10_ddna";
-        var fileSet = DDSFileCombiner.FindMatchingFiles(_tempDir, baseFileName);
+        var fileSet = Library.DDSUnsplitter.FindMatchingFiles(_tempDir, baseFileName);
         
         // Check main texture files
         Assert.That(fileSet.HeaderFile, Is.EqualTo(Path.Combine(_tempDir, "gloss10_ddna.dds")), "Main header file incorrect");
@@ -175,7 +175,7 @@ public class DDSFileCombinerTests
         string directory = Path.GetDirectoryName(baseFileName)!;
         string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(baseFileName);
 
-        var fileSet = DDSFileCombiner.FindMatchingFiles(directory, fileNameWithoutExtension);
+        var fileSet = Library.DDSUnsplitter.FindMatchingFiles(directory, fileNameWithoutExtension);
 
         // Check main texture files
         Assert.That(fileSet.HeaderFile, Is.EqualTo(baseFileName), "Main header file incorrect");
@@ -198,7 +198,7 @@ public class DDSFileCombinerTests
         string baseFileName = Path.Combine(_tempDir, "gloss10_ddna.dds");
         string directory = Path.GetDirectoryName(baseFileName)!;
 
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+        string combinedFileName = Library.DDSUnsplitter.Combine(baseFileName, false);
 
         // Check normal file
         FileInfo normalFile = new(combinedFileName);
@@ -222,7 +222,7 @@ public class DDSFileCombinerTests
         string baseFileName = Path.Combine(_tempDir, "shovel_ddna.dds");
         string directory = Path.GetDirectoryName(baseFileName)!;
 
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, false);
+        string combinedFileName = Library.DDSUnsplitter.Combine(baseFileName, false);
 
         // Check normal file
         FileInfo normalFile = new(combinedFileName);
@@ -246,7 +246,7 @@ public class DDSFileCombinerTests
         string baseFileName = Path.Combine(_tempDir, "DSConceptChild01_sdf.dds");
         string directory = Path.GetDirectoryName(baseFileName)!;
 
-        string combinedFileName = DDSFileCombiner.Combine(baseFileName, true);
+        string combinedFileName = Library.DDSUnsplitter.Combine(baseFileName, true);
 
         // Assert the returned filename is the same as input (no combining occurred)
         Assert.That(combinedFileName, Is.EqualTo(baseFileName));
