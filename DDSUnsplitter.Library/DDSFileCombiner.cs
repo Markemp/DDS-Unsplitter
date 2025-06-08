@@ -216,6 +216,65 @@ public class DdsCombiner
 
         return offset;
     }
+    
+    public MemoryStream CombineFiles(HeaderInfo headerInfo, List<string> mipmapFiles)
+    {
+        var outputStream = new MemoryStream();
+
+        headerInfo.Serialize(outputStream);
+
+        var isCubeMap = (headerInfo.Header.Caps2 & DDSCaps2.CUBEMAP) != 0;
+        var faces = isCubeMap ? 6 : 1;
+
+        var mipMapSizes = GetMipMapSizes(headerInfo.Header);
+        var mipMapBytes = mipmapFiles
+            .OrderDescending()
+            .Select(_fileSystem.ReadAllBytes)
+            .ToArray();
+
+        var postHeaderDataOffset = 0;
+
+        // For cubemaps, we need to organize the data by face first
+        for (var cubeFace = 0; cubeFace < faces; cubeFace++)
+        {
+            for (var mipMap = 0; mipMap < headerInfo.Header.MipMapCount; mipMap++)
+            {
+                var mipMapSize = mipMapSizes[mipMap];
+                var mipMapByteCount = CalculateMipSize(mipMapSize.Width, mipMapSize.Height, headerInfo);
+
+                if (mipMap < mipMapBytes.Length)
+                {
+                    // For cubemaps, each mipmap file should contain all faces
+                    // So we read from the appropriate face offset within each mipmap file
+                    var faceOffset = isCubeMap ? (cubeFace * mipMapByteCount) : 0;
+                    if (faceOffset + mipMapByteCount <= mipMapBytes[mipMap].Length)
+                        outputStream.Write(mipMapBytes[mipMap], faceOffset, mipMapByteCount);
+                    else
+                        throw new InvalidOperationException(
+                            $"Mipmap file {mipMap} doesn't contain expected face data at offset {faceOffset}");
+                }
+                else
+                {
+                    // For the small mipmaps in the main file
+                    var faceOffset = isCubeMap ? (cubeFace * mipMapByteCount) : 0;
+                    if (postHeaderDataOffset + mipMapByteCount <= headerInfo.PostHeaderData.Length)
+                    {
+                        outputStream.Write(headerInfo.PostHeaderData, postHeaderDataOffset, mipMapByteCount);
+                        postHeaderDataOffset += mipMapByteCount;
+                    }
+                    else
+                        throw new InvalidOperationException(
+                            $"Post-header data doesn't contain expected mipmap data at offset {postHeaderDataOffset}");
+                }
+            }
+        }
+
+        outputStream.Write(CRYENGINE_END_MARKER, 0, CRYENGINE_END_MARKER_SIZE);
+        
+        outputStream.Position = 0;
+        
+        return outputStream;
+    }
 }
 
 /// <summary>Combines split DDS files back into a single file, handling CryEngine-specific formatting</summary>
@@ -256,9 +315,13 @@ public class DDSFileCombiner
 
         
         EnsureSafeExtensions(fileSet.HeaderFile);
-        // Combine main texture files
-        CombineFiles(outputPath, headerInfo, fileSet.HeaderFile, fileSet.MipmapFiles);
 
+        {
+            using var outputStream = _combiner.CombineFiles(headerInfo, fileSet.MipmapFiles);
+            using var outputFileStream = _fileSystem.OpenWrite(outputPath);
+            outputStream.CopyTo(outputFileStream);
+        }
+        
         // If there's a gloss texture, combine those files too
         if (fileSet.GlossHeaderFile != null && fileSet.GlossMipmapFiles != null)
         {
@@ -270,7 +333,9 @@ public class DDSFileCombiner
             
             EnsureSafeExtensions(fileSet.GlossHeaderFile);
 
-            CombineFiles(glossOutputPath, glossHeaderInfo, fileSet.GlossHeaderFile, fileSet.GlossMipmapFiles);
+            using var outputStream = _combiner.CombineFiles(glossHeaderInfo, fileSet.GlossMipmapFiles);
+            using var fileStream = _fileSystem.OpenWrite(glossOutputPath);
+            outputStream.CopyTo(fileStream);
         }
 
         return outputPath;
@@ -293,64 +358,6 @@ public class DDSFileCombiner
     {
         var suffix = useSafeName ? $".{combinedFileNameIdentifier}" : null;
         return Path.Combine(directory, $"{fileNameWithoutExtension}{suffix}.{DDS_EXTENSION}");
-    }
-
-    private void CombineFiles(string outputPath, HeaderInfo headerInfo, string headerFile, List<string> mipmapFiles)
-    {
-        int totalHeaderSize = DDS_HEADER_SIZE + (headerInfo.DXT10Header != null ? DXT10_HEADER_SIZE : 0);
-
-        // Use FileShare.Read to allow other processes to read while we're writing
-        using var outputStream = _fileSystem.OpenWrite(outputPath);
-
-        headerInfo.Serialize(outputStream);
-
-        var isCubeMap = (headerInfo.Header.Caps2 & DDSCaps2.CUBEMAP) != 0;
-        var faces = isCubeMap ? 6 : 1;
-
-        var mipMapSizes = _combiner.GetMipMapSizes(headerInfo.Header);
-        var mipMapBytes = mipmapFiles
-            .OrderDescending()
-            .Select(_fileSystem.ReadAllBytes)
-            .ToArray();
-
-        var postHeaderDataOffset = 0;
-
-        // For cubemaps, we need to organize the data by face first
-        for (var cubeFace = 0; cubeFace < faces; cubeFace++)
-        {
-            for (var mipMap = 0; mipMap < headerInfo.Header.MipMapCount; mipMap++)
-            {
-                var mipMapSize = mipMapSizes[mipMap];
-                var mipMapByteCount = _combiner.CalculateMipSize(mipMapSize.Width, mipMapSize.Height, headerInfo);
-
-                if (mipMap < mipMapBytes.Length)
-                {
-                    // For cubemaps, each mipmap file should contain all faces
-                    // So we read from the appropriate face offset within each mipmap file
-                    var faceOffset = isCubeMap ? (cubeFace * mipMapByteCount) : 0;
-                    if (faceOffset + mipMapByteCount <= mipMapBytes[mipMap].Length)
-                        outputStream.Write(mipMapBytes[mipMap], faceOffset, mipMapByteCount);
-                    else
-                        throw new InvalidOperationException(
-                            $"Mipmap file {mipMap} doesn't contain expected face data at offset {faceOffset}");
-                }
-                else
-                {
-                    // For the small mipmaps in the main file
-                    var faceOffset = isCubeMap ? (cubeFace * mipMapByteCount) : 0;
-                    if (postHeaderDataOffset + mipMapByteCount <= headerInfo.PostHeaderData.Length)
-                    {
-                        outputStream.Write(headerInfo.PostHeaderData, postHeaderDataOffset, mipMapByteCount);
-                        postHeaderDataOffset += mipMapByteCount;
-                    }
-                    else
-                        throw new InvalidOperationException(
-                            $"Post-header data doesn't contain expected mipmap data at offset {postHeaderDataOffset}");
-                }
-            }
-        }
-
-        outputStream.Write(CRYENGINE_END_MARKER, 0, CRYENGINE_END_MARKER_SIZE);
     }
 
     private void EnsureSafeExtensions(string headerFile)
